@@ -37,7 +37,6 @@ export async function PUT(
   const db = getDb();
   const order = db
     .prepare(
-      `SELECT id, status, accepted_at, on_way_at, delivered_at, canceled_at, customer_phone, external_id
       `SELECT id, status, accepted_at, on_way_at, delivered_at, canceled_at
        FROM orders
        WHERE id = ?`
