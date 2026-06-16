@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { maybeAutoSyncPoster } from "@/lib/poster-sync";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
+import { resolvePublicUrl } from "@/lib/public-url";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function GET() {
 
   const db = getDb();
   const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get() as
-    | { catalog_mode?: string | null }
+    | Record<string, unknown>
     | undefined;
   const banners = db.prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
   const demoMode = (settings?.catalog_mode ?? "real") === "demo";
@@ -84,10 +85,52 @@ export async function GET() {
     portionOptions: portionsByProduct.get(Number(item.id)) ?? [],
   }));
 
+  const resolvedSettings = settings
+    ? {
+        ...settings,
+        splash_image_url: await resolvePublicUrl(
+          typeof settings.splash_image_url === "string" ? settings.splash_image_url : "",
+        ),
+        payme_qr_image_url: await resolvePublicUrl(
+          typeof settings.payme_qr_image_url === "string" ? settings.payme_qr_image_url : "",
+        ),
+        click_qr_image_url: await resolvePublicUrl(
+          typeof settings.click_qr_image_url === "string" ? settings.click_qr_image_url : "",
+        ),
+      }
+    : settings;
+
+  const resolvedBanners = await Promise.all(
+    banners.map(async (item) => ({
+      ...item,
+      image_url: await resolvePublicUrl(
+        typeof item.image_url === "string" ? item.image_url : "",
+      ),
+    })),
+  );
+
+  const resolvedCategories = await Promise.all(
+    categories.map(async (item) => ({
+      ...item,
+      image_url: await resolvePublicUrl(
+        typeof item.image_url === "string" ? item.image_url : "",
+      ),
+    })),
+  );
+
+  const resolvedProducts = await Promise.all(
+    enrichedProducts.map(async (item) => ({
+      ...item,
+      images: await Promise.all(
+        ((item.images as string[] | undefined) ?? []).map((url) => resolvePublicUrl(url)),
+      ),
+    })),
+  );
+
   return NextResponse.json({
-    settings,
-    banners,
-    categories,
-    products: enrichedProducts,
+    settings: resolvedSettings,
+    banners: resolvedBanners,
+    categories: resolvedCategories,
+    products: resolvedProducts,
   });
 }

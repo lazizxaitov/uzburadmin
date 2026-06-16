@@ -52,10 +52,12 @@ export function Label({ children }: { children: ReactNode }) {
 export function PrimaryButton({
   children,
   className = "",
+  type = "button",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { className?: string }) {
   return (
     <button
+      type={type}
       {...props}
       className={`rounded-2xl bg-[var(--brand-strong)] px-4 py-2.5 text-sm font-bold text-white shadow-[var(--shadow-soft)] transition hover:-translate-y-[1px] hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
     >
@@ -67,10 +69,12 @@ export function PrimaryButton({
 export function GhostButton({
   children,
   className = "",
+  type = "button",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { className?: string }) {
   return (
     <button
+      type={type}
       {...props}
       className={`rounded-2xl border border-[var(--stroke)] bg-white/90 px-4 py-2.5 text-sm font-bold text-[var(--ink)] shadow-sm transition hover:-translate-y-[1px] hover:border-[var(--brand)] hover:bg-[var(--accent)] ${className}`}
     >

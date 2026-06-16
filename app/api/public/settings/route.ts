@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { maybeAutoSyncPoster } from "@/lib/poster-sync";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
+import { resolvePublicUrl } from "@/lib/public-url";
 
 export const runtime = "nodejs";
 
@@ -28,16 +29,18 @@ export async function GET() {
   const enrichedItem = item
     ? {
         ...item,
+        payme_qr_image_url: await resolvePublicUrl(item.payme_qr_image_url ?? ""),
+        click_qr_image_url: await resolvePublicUrl(item.click_qr_image_url ?? ""),
         card_payment_methods: [
           {
             code: "payme",
             title: "Payme",
-            image_url: item.payme_qr_image_url ?? "",
+            image_url: await resolvePublicUrl(item.payme_qr_image_url ?? ""),
           },
           {
             code: "click",
             title: "Click",
-            image_url: item.click_qr_image_url ?? "",
+            image_url: await resolvePublicUrl(item.click_qr_image_url ?? ""),
           },
         ],
       }

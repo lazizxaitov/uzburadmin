@@ -292,6 +292,13 @@ export default function SettingsPage() {
         subtitle="Общие настройки приложения, public API и интеграция с Poster."
       />
 
+      <div className="flex flex-wrap gap-3">
+        <PrimaryButton onClick={save} disabled={saving}>
+          {saving ? "Сохранение..." : "Сохранить"}
+        </PrimaryButton>
+        <GhostButton onClick={load}>Обновить</GhostButton>
+      </div>
+
       {message ? (
         <div className="rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm font-semibold text-[var(--ink)]">
           {message}
@@ -529,25 +536,9 @@ export default function SettingsPage() {
           <Field label="Аккаунт Poster">
             <input value={poster.account_name} onChange={(e) => setPoster({ ...poster, account_name: e.target.value })} placeholder="subdomain" className={inputClass} />
           </Field>
-          <SwitchRow
-            label="Использовать token Poster API"
-            checked={poster.use_token === 1}
-            onChange={(checked) => setPoster({ ...poster, use_token: checked ? 1 : 0 })}
-          />
           <Field label="Token">
             <input value={poster.access_token} onChange={(e) => setPoster({ ...poster, access_token: e.target.value })} className={inputClass} />
           </Field>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Poster login / email">
-              <input value={poster.username} onChange={(e) => setPoster({ ...poster, username: e.target.value })} className={inputClass} />
-            </Field>
-            <Field label="Poster password">
-              <input type="password" value={poster.password} onChange={(e) => setPoster({ ...poster, password: e.target.value })} className={inputClass} />
-            </Field>
-          </div>
-          <p className="text-xs text-[var(--muted)]">
-            Poster public API использует access token. Логин и пароль сохраняются в настройках, но для запросов sync и API всё равно нужен token.
-          </p>
           <div className="grid gap-3 md:grid-cols-3">
             <SwitchRow
               label="Категории"
@@ -600,18 +591,10 @@ export default function SettingsPage() {
               />
             </Field>
           </div>
-          <Field label="Webhook secret">
-            <input
-              value={poster.webhook_secret}
-              onChange={(e) => setPoster({ ...poster, webhook_secret: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
           <div className="rounded-2xl bg-white p-4 text-sm">
             <p><b>Статус:</b> {poster.is_connected ? "Подключено" : "Не подключено"}</p>
             <p><b>Последний sync:</b> {poster.last_sync_at || "—"}</p>
             <p><b>Результат:</b> {poster.last_sync_error || poster.last_sync_status || "—"}</p>
-            <p><b>Webhook URL:</b> /api/poster/webhook?secret={poster.webhook_secret || "YOUR_SECRET"}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <PrimaryButton onClick={testConnection} disabled={testing}>
@@ -622,13 +605,6 @@ export default function SettingsPage() {
             </PrimaryButton>
           </div>
         </Card>
-      </div>
-
-      <div className="flex gap-3">
-        <PrimaryButton onClick={save} disabled={saving}>
-          {saving ? "Сохранение..." : "Сохранить"}
-        </PrimaryButton>
-        <GhostButton onClick={load}>Обновить</GhostButton>
       </div>
     </div>
   );
