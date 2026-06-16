@@ -168,7 +168,7 @@ function extractProductImages(raw: Record<string, unknown>) {
   );
 }
 
-function firstValidNumber(values: unknown[], fallback = 0) {
+function firstValidNumber(values: unknown[], fallback = 0): number {
   for (const value of values) {
     if (Array.isArray(value)) {
       const nested = firstValidNumber(value, Number.NaN);
