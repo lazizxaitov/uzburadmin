@@ -300,10 +300,10 @@ export default function ProductsPage() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={"\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e"}
-              className="h-9 w-52 rounded-2xl border border-[var(--stroke)] bg-white px-3 text-xs"
+              className="h-10 w-64 rounded-2xl border border-[var(--stroke)] bg-white px-3 text-sm"
             />
             <GhostButton onClick={() => setSearchQuery("")}>
-              {"\u041f\u043e\u0438\u0441\u043a"}
+              {"\u0421\u0431\u0440\u043e\u0441"}
             </GhostButton>
           </div>
           <div className="relative">
@@ -369,7 +369,7 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <Card className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[var(--stroke)] bg-white/90 p-4">
         <div>
           <h3 className="text-lg font-bold text-[var(--ink)]">Список товаров</h3>
           <p className="text-sm text-[var(--muted)]">
@@ -384,7 +384,7 @@ export default function ProductsPage() {
         >
           Добавить
         </PrimaryButton>
-      </Card>
+      </div>
 
       {error ? (
         <Card className="border-[var(--danger)] bg-red-50/80 text-sm font-semibold text-red-700">
@@ -392,49 +392,65 @@ export default function ProductsPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="overflow-hidden rounded-3xl border border-[var(--stroke)] bg-white/95">
         {loading ? (
-          <Card>Загрузка...</Card>
+          <div className="p-5">Загрузка...</div>
         ) : filteredItems.length === 0 ? (
-          <Card>Пока нет товаров.</Card>
+          <div className="p-5">Пока нет товаров.</div>
         ) : (
-          filteredItems.map((item) => (
-            <Card key={item.id} className="flex flex-col gap-4">
-              {item.images?.[0] ? (
-                <Image
-                  src={item.images[0]}
-                  alt={item.title_ru}
-                  unoptimized
-                  className="h-36 w-full rounded-2xl object-cover"
-                  width={1200}
-                  height={720}
-                />
-              ) : null}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-lg font-bold text-[var(--ink)]">
+          <div>
+            <div className="hidden grid-cols-[88px_minmax(0,1fr)_220px] gap-4 border-b border-[var(--stroke)] bg-[var(--surface)] px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-[var(--muted)] md:grid">
+              <div>Фото</div>
+              <div>Товар</div>
+              <div className="text-right">Действия</div>
+            </div>
+            <div className="divide-y divide-[var(--stroke)]">
+            {filteredItems.map((item) => (
+              <div
+                key={item.id}
+                className="grid gap-3 px-4 py-3 md:grid-cols-[88px_minmax(0,1fr)_220px] md:items-center"
+              >
+                <div className="overflow-hidden rounded-2xl border border-[var(--stroke)] bg-[var(--surface)]">
+                  {item.images?.[0] ? (
+                    <Image
+                      src={item.images[0]}
+                      alt={item.title_ru}
+                      unoptimized
+                      className="h-20 w-20 object-cover md:h-[72px] md:w-[88px]"
+                      width={176}
+                      height={144}
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center text-xs text-[var(--muted)] md:h-[72px] md:w-[88px]">
+                      Нет фото
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-bold text-[var(--ink)]">
                     {item.title_ru}
                   </p>
-                  <p className="text-sm text-[var(--muted)]">
+                  <p className="truncate text-sm text-[var(--muted)]">
                     {item.title_uz}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted)]">
+                    <span>ID: {item.id}</span>
+                    <span>Категория: {item.category_name_ru ?? "—"}</span>
+                    <span>Остаток: {item.stock}</span>
+                    <span>{item.is_active ? "Активен" : "Скрыт"}</span>
+                  </div>
                   <p className="mt-2 text-sm font-semibold text-[var(--ink)]">
                     {item.price.toLocaleString("ru-RU")} сум
                   </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    Категория: {item.category_name_ru ?? "—"}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    Остаток: {item.stock} · {item.is_active ? "Активен" : "Скрыт"}
-                  </p>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
                   <GhostButton onClick={() => startEdit(item)}>Ред.</GhostButton>
                   <GhostButton onClick={() => remove(item.id)}>Удал.</GhostButton>
                 </div>
               </div>
-            </Card>
-          ))
+            ))}
+            </div>
+          </div>
         )}
       </div>
 

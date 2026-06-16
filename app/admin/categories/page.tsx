@@ -230,16 +230,16 @@ export default function CategoriesPage() {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={"Поиск по категориям"}
-            className="h-9 w-52 rounded-2xl border border-[var(--stroke)] bg-white px-3 text-xs"
+            className="h-10 w-64 rounded-2xl border border-[var(--stroke)] bg-white px-3 text-sm"
           />
           <GhostButton onClick={() => setSearchQuery("")}>
-            {"Поиск"}
+            {"Сброс"}
           </GhostButton>
         </div>
       </div>
 
 
-      <Card className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[var(--stroke)] bg-white/90 p-4">
         <div>
           <h3 className="text-lg font-bold text-[var(--ink)]">
             Список категорий
@@ -256,7 +256,7 @@ export default function CategoriesPage() {
         >
           Добавить
         </PrimaryButton>
-      </Card>
+      </div>
 
       {error ? (
         <Card className="border-[var(--danger)] bg-red-50/80 text-sm font-semibold text-red-700">
@@ -264,86 +264,91 @@ export default function CategoriesPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="overflow-hidden rounded-3xl border border-[var(--stroke)] bg-white/95">
         {loading ? (
-          <Card>Загрузка...</Card>
+          <div className="p-5">Загрузка...</div>
         ) : filteredItems.length === 0 ? (
-          <Card>Пока нет категорий.</Card>
+          <div className="p-5">Пока нет категорий.</div>
         ) : (
-          filteredItems.map((item) => (
-            <Card key={item.id} className="flex flex-col gap-4">
-              {item.image_url ? (
-                <Image
-                  src={item.image_url}
-                  alt={item.name_ru}
-                  unoptimized
-                  className="h-36 w-full rounded-2xl object-cover"
-                  width={1200}
-                  height={720}
-                />
-              ) : null}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-lg font-bold text-[var(--ink)]">
+          <div>
+            <div className="hidden grid-cols-[88px_minmax(0,1fr)_220px] gap-4 border-b border-[var(--stroke)] bg-[var(--surface)] px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-[var(--muted)] md:grid">
+              <div>Фото</div>
+              <div>Категория</div>
+              <div className="text-right">Действия</div>
+            </div>
+            <div className="divide-y divide-[var(--stroke)]">
+            {filteredItems.map((item) => (
+              <div
+                key={item.id}
+                className="grid gap-3 px-4 py-3 md:grid-cols-[88px_minmax(0,1fr)_220px] md:items-center"
+              >
+                <div className="overflow-hidden rounded-2xl border border-[var(--stroke)] bg-[var(--surface)]">
+                  {item.image_url ? (
+                    <Image
+                      src={item.image_url}
+                      alt={item.name_ru}
+                      unoptimized
+                      className="h-20 w-20 object-cover md:h-[72px] md:w-[88px]"
+                      width={176}
+                      height={144}
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center text-xs text-[var(--muted)] md:h-[72px] md:w-[88px]">
+                      Нет фото
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-bold text-[var(--ink)]">
                     {item.name_ru}
                   </p>
-                  <p className="text-sm text-[var(--muted)]">
+                  <p className="truncate text-sm text-[var(--muted)]">
                     {item.name_uz}
                   </p>
-                  <p className="mt-2 text-xs text-[var(--muted)]">
-                    slug: {item.slug}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {"\u0421\u0442\u0430\u0442\u0443\u0441"}:{" "}
-                    {item.is_active === 1
-                      ? "\u0412\u0438\u0434\u0438\u043c\u0430 \u0432 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0438"
-                      : "\u0421\u043a\u0440\u044b\u0442\u0430 \u0432 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0438"}
-                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted)]">
+                    <span>ID: {item.id}</span>
+                    <span>slug: {item.slug}</span>
+                    <span>
+                      {item.is_active === 1 ? "Активна" : "Скрыта"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <GhostButton onClick={() => moveCategory(item.id, "up")}>
-                      {"\u2191"}
-                    </GhostButton>
-                    <GhostButton onClick={() => moveCategory(item.id, "down")}>
-                      {"\u2193"}
-                    </GhostButton>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-[var(--muted)]">{"\u041f\u043e\u0440\u044f\u0434\u043e\u043a"}</span>
-                    <input
-                      type="number"
-                      value={item.sort_order ?? 0}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        setItems((prev) =>
-                          prev.map((cat) =>
-                            cat.id === item.id
-                              ? { ...cat, sort_order: value }
-                              : cat
-                          )
-                        );
-                      }}
-                      onBlur={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isFinite(value)) {
-                          updateSortOrder(item.id, value);
-                        }
-                      }}
-                      className="w-20 rounded-2xl border border-[var(--stroke)] bg-white px-2 py-1 text-xs"
-                    />
-                  </div>
-                  <GhostButton onClick={() => toggleCategoryVisibility(item)}>
-                    {item.is_active === 1
-                      ? "\u0421\u043a\u0440\u044b\u0442\u044c"
-                      : "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c"}
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <GhostButton onClick={() => moveCategory(item.id, "up")}>
+                    ↑
                   </GhostButton>
-                  <GhostButton onClick={() => startEdit(item)}>{"\u0420\u0435\u0434."}</GhostButton>
-                  <GhostButton onClick={() => remove(item.id)}>{"\u0423\u0434\u0430\u043b."}</GhostButton>
+                  <GhostButton onClick={() => moveCategory(item.id, "down")}>
+                    ↓
+                  </GhostButton>
+                  <input
+                    type="number"
+                    value={item.sort_order ?? 0}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setItems((prev) =>
+                        prev.map((cat) =>
+                          cat.id === item.id ? { ...cat, sort_order: value } : cat
+                        )
+                      );
+                    }}
+                    onBlur={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value)) {
+                        updateSortOrder(item.id, value);
+                      }
+                    }}
+                    className="h-9 w-20 rounded-2xl border border-[var(--stroke)] bg-white px-2 text-sm"
+                  />
+                  <GhostButton onClick={() => toggleCategoryVisibility(item)}>
+                    {item.is_active === 1 ? "Скрыть" : "Показать"}
+                  </GhostButton>
+                  <GhostButton onClick={() => startEdit(item)}>Ред.</GhostButton>
+                  <GhostButton onClick={() => remove(item.id)}>Удал.</GhostButton>
                 </div>
               </div>
-            </Card>
-          ))
+            ))}
+            </div>
+          </div>
         )}
       </div>
 
