@@ -38,6 +38,14 @@ function toText(value: unknown) {
 }
 
 function toNumber(value: unknown, fallback = 0) {
+  if (typeof value === "string") {
+    const normalized = value
+      .replace(/\s+/g, "")
+      .replace(",", ".")
+      .trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -100,6 +108,15 @@ function extractUrls(value: unknown): string[] {
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
       return [trimmed];
     }
+    if (trimmed.startsWith("//")) {
+      return [`https:${trimmed}`];
+    }
+    if (trimmed.startsWith("/")) {
+      return [`https://joinposter.com${trimmed}`];
+    }
+    if (trimmed.includes("joinposter.com/")) {
+      return [`https://${trimmed.replace(/^https?:\/\//, "")}`];
+    }
     return [];
   }
 
@@ -130,6 +147,9 @@ function extractProductImages(raw: Record<string, unknown>) {
   const directKeys = [
     "photo_origin",
     "photo",
+    "photo_big",
+    "photo_src",
+    "photo_path",
     "image",
     "image_url",
     "photo_url",
@@ -141,7 +161,53 @@ function extractProductImages(raw: Record<string, unknown>) {
   ];
 
   return uniqueStrings(
-    directKeys.flatMap((key) => extractUrls(raw[key])),
+    [
+      ...directKeys.flatMap((key) => extractUrls(raw[key])),
+      ...extractUrls(raw),
+    ],
+  );
+}
+
+function firstValidNumber(values: unknown[], fallback = 0) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstValidNumber(value, Number.NaN);
+      if (Number.isFinite(nested)) return nested;
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      const nested = firstValidNumber(Object.values(value as Record<string, unknown>), Number.NaN);
+      if (Number.isFinite(nested)) return nested;
+      continue;
+    }
+
+    const parsed = toNumber(value, Number.NaN);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
+function extractProductPrice(raw: Record<string, unknown>) {
+  return firstValidNumber(
+    [
+      raw.price1,
+      raw.price,
+      raw.cost,
+      raw.menu_price,
+      raw.product_price,
+      raw.base_price,
+      raw.spots,
+      raw.spot_prices,
+      raw.prices,
+      raw.price_list,
+      raw.variation_prices,
+      raw.modifications,
+      raw.portions,
+      raw.sizes,
+    ],
+    0,
   );
 }
 
@@ -363,7 +429,7 @@ export async function runPosterSync(): Promise<PosterSyncResult> {
             null,
             descriptionRu,
             descriptionUz,
-            toNumber(raw.price1 ?? raw.price ?? raw.cost ?? 0),
+            extractProductPrice(raw),
             null,
             null,
             pricingMode,

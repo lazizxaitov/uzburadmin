@@ -27,6 +27,7 @@
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/*.sqlite
 
 # debug
 npm-debug.log*
