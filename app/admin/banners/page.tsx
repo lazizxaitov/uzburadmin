@@ -39,6 +39,8 @@ export default function BannersPage() {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
@@ -77,6 +79,7 @@ export default function BannersPage() {
 
   const resetForm = () => {
     setEditingId(null);
+    setError(null);
     setForm({
       titleRu: "",
       titleUz: "",
@@ -92,6 +95,7 @@ export default function BannersPage() {
 
   const startEdit = (item: Banner) => {
     setEditingId(item.id);
+    setError(null);
     setModalOpen(true);
     setForm({
       titleRu: item.title_ru,
@@ -120,8 +124,20 @@ export default function BannersPage() {
   };
 
   const submit = async () => {
-    if (form.bannerType === "product" && !form.targetProductId) return;
-    if (form.bannerType === "category" && !form.targetCategoryId) return;
+    if (!form.titleRu.trim() || !form.titleUz.trim() || !form.imageUrl.trim()) {
+      setError("Заполните заголовки и загрузите картинку");
+      return;
+    }
+    if (form.bannerType === "product" && !form.targetProductId) {
+      setError("Выберите товар");
+      return;
+    }
+    if (form.bannerType === "category" && !form.targetCategoryId) {
+      setError("Выберите категорию");
+      return;
+    }
+    setSaving(true);
+    setError(null);
 
     const payload = {
       titleRu: form.titleRu,
@@ -141,23 +157,29 @@ export default function BannersPage() {
       isActive: form.isActive,
     };
 
-    if (editingId) {
-      await fetch(`/api/banners/${editingId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/banners", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const response = editingId
+      ? await fetch(`/api/banners/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : await fetch("/api/banners", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      setError(data?.error ?? "Не удалось сохранить баннер");
+      setSaving(false);
+      return;
     }
 
     resetForm();
     setModalOpen(false);
     load();
+    setSaving(false);
   };
 
   const remove = async (id: number) => {
@@ -188,6 +210,12 @@ export default function BannersPage() {
           Добавить
         </PrimaryButton>
       </Card>
+
+      {error ? (
+        <Card className="border-[var(--danger)] bg-red-50/80 text-sm font-semibold text-red-700">
+          {error}
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         {loading ? (
@@ -237,13 +265,18 @@ export default function BannersPage() {
         title={editingId ? "Редактировать баннер" : "Новый баннер"}
         footer={
           <div className="flex flex-wrap gap-3">
-            <PrimaryButton onClick={submit}>
-              {editingId ? "Сохранить" : "Создать"}
+            <PrimaryButton onClick={submit} disabled={saving}>
+              {saving ? "Сохранение..." : editingId ? "Сохранить" : "Создать"}
             </PrimaryButton>
             <GhostButton onClick={resetForm}>Очистить</GhostButton>
           </div>
         }
       >
+        {error ? (
+          <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <label className="text-sm font-semibold">
             Заголовок (RU)
@@ -408,6 +441,11 @@ export default function BannersPage() {
         imageSrc={cropSrc ?? ""}
         aspect={311 / 170}
         title="Обрезка баннера"
+        helperText="Сразу видно, какая часть попадёт в баннер"
+        targetWidth={1244}
+        targetHeight={680}
+        maxWidth={1244}
+        maxHeight={680}
         onCancel={() => {
           setCropOpen(false);
           setCropSrc(null);

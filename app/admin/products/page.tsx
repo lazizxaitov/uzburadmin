@@ -825,6 +825,11 @@ export default function ProductsPage() {
         imageSrc={cropSrc ?? ""}
         aspect={productAspect}
         title="Обрезка товара"
+        helperText="Обрежьте фото так, как оно будет видно в списке товаров"
+        targetWidth={704}
+        targetHeight={584}
+        maxWidth={704}
+        maxHeight={584}
         onCancel={handleCropCancel}
         onConfirm={handleCropConfirm}
       />

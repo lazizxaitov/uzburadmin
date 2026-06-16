@@ -417,21 +417,16 @@ if (!demoImageExists) {
 }
 
 const reviewPhone = "+998997447744";
-const reviewCustomer = db
-  .prepare("SELECT id, password_hash FROM customers WHERE phone = ?")
-  .get(reviewPhone) as { id: number; password_hash: string } | undefined;
-
-if (!reviewCustomer) {
-  db.prepare(
-    `INSERT INTO customers
-     (full_name, phone, email, password_hash, notes, bonus_balance, total_spent, total_orders, is_active, created_at, updated_at)
-     VALUES (?, ?, '', ?, '', 0, 0, 0, 1, ?, ?)`
-  ).run("App Review", reviewPhone, hashPassword("test"), now, now);
-} else {
-  db.prepare(
-    "UPDATE customers SET full_name = ?, password_hash = ?, is_active = 1, updated_at = ? WHERE id = ?"
-  ).run("App Review", hashPassword("test"), now, reviewCustomer.id);
-}
+db.prepare(
+  `INSERT INTO customers
+   (full_name, phone, email, password_hash, notes, bonus_balance, total_spent, total_orders, is_active, created_at, updated_at)
+   VALUES (?, ?, '', ?, '', 0, 0, 0, 1, ?, ?)
+   ON CONFLICT(phone) DO UPDATE SET
+     full_name = excluded.full_name,
+     password_hash = excluded.password_hash,
+     is_active = 1,
+     updated_at = excluded.updated_at`
+).run("App Review", reviewPhone, hashPassword("test"), now, now);
 
 db.prepare(`
   INSERT INTO poster_settings (

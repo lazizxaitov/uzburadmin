@@ -451,6 +451,9 @@ export default function CategoriesPage() {
         maxWidth={900}
         maxHeight={600}
         title="Обрезка категории"
+        helperText="Обрежьте фото так, как оно будет видно в списке и каталоге"
+        targetWidth={900}
+        targetHeight={600}
         onCancel={() => {
           setCropOpen(false);
           setCropSrc(null);

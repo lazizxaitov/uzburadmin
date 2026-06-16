@@ -10,6 +10,9 @@ type Props = {
   imageSrc: string;
   aspect: number;
   title: string;
+  helperText?: string;
+  targetWidth?: number;
+  targetHeight?: number;
   outputType?: string;
   maxWidth?: number;
   maxHeight?: number;
@@ -93,6 +96,9 @@ export default function ImageCropper({
   imageSrc,
   aspect,
   title,
+  helperText,
+  targetWidth,
+  targetHeight,
   outputType,
   maxWidth,
   maxHeight,
@@ -143,7 +149,17 @@ export default function ImageCropper({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative z-10 w-full max-w-3xl rounded-3xl border border-[var(--stroke)] bg-[var(--surface)] p-6 shadow-[var(--shadow)]">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-extrabold text-[var(--ink)]">{title}</h3>
+          <div>
+            <h3 className="text-lg font-extrabold text-[var(--ink)]">{title}</h3>
+            {helperText || targetWidth || targetHeight ? (
+              <p className="mt-1 text-sm font-medium text-[var(--muted)]">
+                {helperText ?? ""}
+                {targetWidth || targetHeight
+                  ? `${helperText ? " · " : ""}Результат: ${targetWidth ?? "auto"} × ${targetHeight ?? "auto"}`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
           <GhostButton onClick={onCancel}>Закрыть</GhostButton>
         </div>
 
@@ -157,7 +173,9 @@ export default function ImageCropper({
             onZoomChange={setZoom}
             onCropComplete={onCropComplete}
             onMediaLoaded={onMediaLoaded}
+            showGrid
           />
+          <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/70 ring-inset" />
         </div>
 
         <div className="mt-4">

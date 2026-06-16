@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Card, GhostButton, PrimaryButton, SectionTitle } from "../_components/ui";
+import ImageCropper from "../_components/image-cropper";
 
 type Settings = {
   cafe_name: string;
@@ -116,6 +117,9 @@ export default function SettingsPage() {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
   const [testingEskiz, setTestingEskiz] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropType, setCropType] = useState("image/jpeg");
   const [plumStatus, setPlumStatus] = useState<{
     ok: boolean | null;
     text: string;
@@ -359,8 +363,13 @@ export default function SettingsPage() {
                 onChange={async (event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
-                  const url = await uploadImage(file);
-                  setForm({ ...form, splash_image_url: url });
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setCropSrc(reader.result as string);
+                    setCropType(file.type || "image/jpeg");
+                    setCropOpen(true);
+                  };
+                  reader.readAsDataURL(file);
                   event.target.value = "";
                 }}
                 className={inputClass}
@@ -606,6 +615,29 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      <ImageCropper
+        open={cropOpen && Boolean(cropSrc)}
+        imageSrc={cropSrc ?? ""}
+        aspect={9 / 16}
+        title="Обрезка splash"
+        helperText="Обрежьте картинку так, как она будет видна на экране загрузки"
+        targetWidth={1080}
+        targetHeight={1920}
+        maxWidth={1080}
+        maxHeight={1920}
+        outputType={cropType}
+        onCancel={() => {
+          setCropOpen(false);
+          setCropSrc(null);
+        }}
+        onConfirm={async (file) => {
+          const url = await uploadImage(file);
+          setForm((prev) => ({ ...prev, splash_image_url: url }));
+          setCropOpen(false);
+          setCropSrc(null);
+        }}
+      />
     </div>
   );
 }
