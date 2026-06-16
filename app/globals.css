@@ -1,26 +1,92 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #faf8f4;
+  --surface: rgba(255, 255, 255, 0.92);
+  --card: #ffffff;
+  --ink: #33332e;
+  --muted: #766a5f;
+  --stroke: rgba(92, 64, 51, 0.12);
+  --brand: #b68d5f;
+  --brand-strong: #6b4a2b;
+  --brand-soft: #e8e1d9;
+  --accent: #f3eee6;
+  --accent-strong: #5c4033;
+  --success: #2c8c61;
+  --danger: #d32f2f;
+  --glow: rgba(231, 213, 191, 0.72);
+  --glow-soft: rgba(229, 201, 167, 0.38);
+  --shadow: 0 18px 48px rgba(58, 44, 30, 0.14);
+  --shadow-soft: 0 10px 28px rgba(58, 44, 30, 0.08);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-montserrat);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-montserrat), sans-serif;
+}
+
+.grainy {
+  background-image:
+    radial-gradient(circle at 12% 8%, var(--glow), transparent 38%),
+    radial-gradient(circle at 88% 22%, var(--glow-soft), transparent 30%),
+    radial-gradient(circle at 76% 88%, rgba(232, 225, 217, 0.7), transparent 30%),
+    linear-gradient(180deg, #faf8f4 0%, #f3eee6 100%);
+  background-attachment: fixed;
+}
+
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.soft-card {
+  border: 1px solid var(--stroke);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+input,
+textarea,
+select {
+  color: var(--ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--brand) 24%, white);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
