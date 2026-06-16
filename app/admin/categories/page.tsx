@@ -276,6 +276,7 @@ export default function CategoriesPage() {
                 <Image
                   src={item.image_url}
                   alt={item.name_ru}
+                  unoptimized
                   className="h-36 w-full rounded-2xl object-cover"
                   width={1200}
                   height={720}
@@ -428,6 +429,7 @@ export default function CategoriesPage() {
             <Image
               src={form.imageUrl}
               alt="preview"
+              unoptimized
               className="h-40 w-full object-cover"
               width={1200}
               height={720}

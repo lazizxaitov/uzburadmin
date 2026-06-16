@@ -404,6 +404,7 @@ export default function ProductsPage() {
                 <Image
                   src={item.images[0]}
                   alt={item.title_ru}
+                  unoptimized
                   className="h-36 w-full rounded-2xl object-cover"
                   width={1200}
                   height={720}
@@ -778,6 +779,7 @@ export default function ProductsPage() {
                   <Image
                     src={url}
                     alt="product"
+                    unoptimized
                     className="h-20 w-full rounded-xl object-cover"
                     width={360}
                     height={240}
