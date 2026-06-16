@@ -22,7 +22,9 @@ export async function GET() {
   const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get() as
     | Record<string, unknown>
     | undefined;
-  const banners = db.prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
+  const banners = db
+    .prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC")
+    .all() as Array<Record<string, unknown>>;
   const demoMode = (settings?.catalog_mode ?? "real") === "demo";
   const categories = db.prepare(
     demoMode
