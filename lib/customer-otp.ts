@@ -56,7 +56,7 @@ export async function createOtpRequest({ purpose, phone, payload }: CreateOtpInp
 
   const smsResult = await sendEskizSms({
     phone,
-    message: `Uzbur tasdiqlash kodi: ${code}`,
+    message: `Код подтверждения для регистрации на мобильном приложении Uzbur : ${code}`,
   });
   if (!smsResult.ok) {
     throw new Error(smsResult.error || "SMS yuborilmadi");
