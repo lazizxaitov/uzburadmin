@@ -3,11 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb, nowIso } from "@/lib/db";
 import {
   createOtpRequest,
-  isOtpEnabled,
-  shouldBypassOtp,
   verifyOtpRequest,
 } from "@/lib/customer-otp";
-import { notifyRegistration } from "@/lib/eskiz";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
 import {
   createCustomerSession,
@@ -63,7 +60,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (isOtpEnabled() && !shouldBypassOtp(phone) && !otp) {
+  if (!otp) {
     try {
       const otpRequest = await createOtpRequest({
         purpose: "register",
@@ -89,18 +86,16 @@ export async function POST(request: Request) {
   }
 
   let resolvedPasswordHash = passwordHash;
-  if (isOtpEnabled() && !shouldBypassOtp(phone)) {
-    const verified = verifyOtpRequest({
-      requestToken,
-      purpose: "register",
-      otp,
-    });
-    if (!verified.ok) {
-      return NextResponse.json({ error: verified.error }, { status: verified.status });
-    }
-    resolvedPasswordHash =
-      verified.payload.passwordHash?.toString() || resolvedPasswordHash;
+  const verified = verifyOtpRequest({
+    requestToken,
+    purpose: "register",
+    otp,
+  });
+  if (!verified.ok) {
+    return NextResponse.json({ error: verified.error }, { status: verified.status });
   }
+  resolvedPasswordHash =
+    verified.payload.passwordHash?.toString() || resolvedPasswordHash;
 
   if (existing) {
     db.prepare(
@@ -121,9 +116,6 @@ export async function POST(request: Request) {
   }
 
   const token = createCustomerSession(customerId);
-  try {
-    await notifyRegistration(phone, fullName);
-  } catch {}
   return NextResponse.json({
     ok: true,
     token,

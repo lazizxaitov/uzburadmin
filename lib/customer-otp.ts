@@ -6,7 +6,6 @@ import { getDb, nowIso } from "./db";
 import { sendEskizSms } from "./eskiz";
 
 const OTP_TTL_MINUTES = 5;
-const REVIEW_PHONE = "+998997447744";
 
 type OtpPurpose = "register" | "login";
 
@@ -22,17 +21,6 @@ function createCode() {
 
 function createRequestToken() {
   return crypto.randomBytes(24).toString("hex");
-}
-
-export function isOtpEnabled() {
-  const row = getDb()
-    .prepare("SELECT eskiz_enabled FROM settings WHERE id = 1")
-    .get() as { eskiz_enabled?: number } | undefined;
-  return Number(row?.eskiz_enabled ?? 0) === 1;
-}
-
-export function shouldBypassOtp(phone: string) {
-  return phone.trim() == REVIEW_PHONE;
 }
 
 export async function createOtpRequest({ purpose, phone, payload }: CreateOtpInput) {
@@ -66,10 +54,13 @@ export async function createOtpRequest({ purpose, phone, payload }: CreateOtpInp
     createdAt
   );
 
-  await sendEskizSms({
+  const smsResult = await sendEskizSms({
     phone,
     message: `Uzbur tasdiqlash kodi: ${code}`,
   });
+  if (!smsResult.ok) {
+    throw new Error(smsResult.error || "SMS yuborilmadi");
+  }
 
   return {
     requestToken,

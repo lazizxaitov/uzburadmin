@@ -13,7 +13,16 @@ function ensureColumn(table: string, column: string, definition: string) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   const exists = columns.some((item) => item.name === column);
   if (!exists) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.toLowerCase().includes("duplicate column name")
+      ) {
+        throw error;
+      }
+    }
   }
 }
 
@@ -77,6 +86,7 @@ db.exec(`
     title_uz TEXT NOT NULL,
     image_url TEXT NOT NULL,
     banner_type TEXT NOT NULL DEFAULT 'image',
+    use_target_image INTEGER NOT NULL DEFAULT 0,
     target_product_id INTEGER,
     target_category_id INTEGER,
     link_url TEXT,
@@ -258,6 +268,7 @@ db.exec(`
 `);
 
 ensureColumn("settings", "splash_image_url", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("banners", "use_target_image", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("settings", "splash_title_ru", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("settings", "splash_title_uz", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("settings", "splash_subtitle_ru", "TEXT NOT NULL DEFAULT ''");
@@ -415,18 +426,6 @@ if (!demoImageExists) {
     0,
   );
 }
-
-const reviewPhone = "+998997447744";
-db.prepare(
-  `INSERT INTO customers
-   (full_name, phone, email, password_hash, notes, bonus_balance, total_spent, total_orders, is_active, created_at, updated_at)
-   VALUES (?, ?, '', ?, '', 0, 0, 0, 1, ?, ?)
-   ON CONFLICT(phone) DO UPDATE SET
-     full_name = excluded.full_name,
-     password_hash = excluded.password_hash,
-     is_active = 1,
-     updated_at = excluded.updated_at`
-).run("App Review", reviewPhone, hashPassword("test"), now, now);
 
 db.prepare(`
   INSERT INTO poster_settings (

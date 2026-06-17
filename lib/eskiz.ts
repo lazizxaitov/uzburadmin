@@ -149,12 +149,3 @@ export async function testEskizConnection() {
   const token = await getEskizToken(settings);
   return { ok: true, tokenPreview: `${token.slice(0, 8)}...` };
 }
-
-export async function notifyRegistration(phone: string, customerName: string) {
-  const settings = getEskizSettings();
-  if (!settings || Number(settings.eskiz_notify_on_register ?? 0) !== 1) return;
-  await sendEskizSms({
-    phone,
-    message: `Uzbur: ${customerName || "Mijoz"}, ro'yxatdan o'tish muvaffaqiyatli yakunlandi.`,
-  });
-}

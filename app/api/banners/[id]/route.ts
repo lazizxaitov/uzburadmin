@@ -24,13 +24,15 @@ export async function PUT(
   const titleUz = body?.titleUz?.toString()?.trim();
   const imageUrl = body?.imageUrl?.toString()?.trim();
   const bannerType = body?.bannerType === "product" || body?.bannerType === "category" ? body.bannerType : "image";
+  const useTargetImage = body?.useTargetImage === true ? 1 : 0;
   const targetProductId = body?.targetProductId ? Number(body.targetProductId) : null;
   const targetCategoryId = body?.targetCategoryId ? Number(body.targetCategoryId) : null;
   const linkUrl = body?.linkUrl?.toString()?.trim() ?? null;
   const sortOrder = Number(body?.sortOrder ?? 0);
   const isActive = body?.isActive === false ? 0 : 1;
+  const requiresUploadedImage = !(bannerType !== "image" && useTargetImage === 1);
 
-  if (!titleRu || !titleUz || !imageUrl) {
+  if (!titleRu || !titleUz || (requiresUploadedImage && !imageUrl)) {
     return NextResponse.json({ error: "Missing data" }, { status: 400 });
   }
 
@@ -38,13 +40,14 @@ export async function PUT(
   const now = nowIso();
   db.prepare(
     `UPDATE banners
-     SET title_ru = ?, title_uz = ?, image_url = ?, banner_type = ?, target_product_id = ?, target_category_id = ?, link_url = ?, sort_order = ?, is_active = ?, updated_at = ?
+     SET title_ru = ?, title_uz = ?, image_url = ?, banner_type = ?, use_target_image = ?, target_product_id = ?, target_category_id = ?, link_url = ?, sort_order = ?, is_active = ?, updated_at = ?
      WHERE id = ?`
   ).run(
     titleRu,
     titleUz,
-    imageUrl,
+    imageUrl ?? "",
     bannerType,
+    bannerType === "image" ? 0 : useTargetImage,
     bannerType === "product" ? targetProductId : null,
     bannerType === "category" ? targetCategoryId : null,
     bannerType === "image" ? linkUrl : null,

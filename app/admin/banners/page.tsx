@@ -17,6 +17,7 @@ type Banner = {
   title_uz: string;
   image_url: string;
   banner_type?: string;
+  use_target_image?: number;
   target_product_id?: number | null;
   target_category_id?: number | null;
   link_url?: string | null;
@@ -45,11 +46,16 @@ export default function BannersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [productOpen, setProductOpen] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categoryQuery, setCategoryQuery] = useState("");
   const [form, setForm] = useState({
     titleRu: "",
     titleUz: "",
     imageUrl: "",
     bannerType: "image",
+    useTargetImage: false,
     targetProductId: "",
     targetCategoryId: "",
     linkUrl: "",
@@ -80,11 +86,16 @@ export default function BannersPage() {
   const resetForm = () => {
     setEditingId(null);
     setError(null);
+    setProductOpen(false);
+    setProductQuery("");
+    setCategoryOpen(false);
+    setCategoryQuery("");
     setForm({
       titleRu: "",
       titleUz: "",
       imageUrl: "",
       bannerType: "image",
+      useTargetImage: false,
       targetProductId: "",
       targetCategoryId: "",
       linkUrl: "",
@@ -96,12 +107,17 @@ export default function BannersPage() {
   const startEdit = (item: Banner) => {
     setEditingId(item.id);
     setError(null);
+    setProductOpen(false);
+    setProductQuery("");
+    setCategoryOpen(false);
+    setCategoryQuery("");
     setModalOpen(true);
     setForm({
       titleRu: item.title_ru,
       titleUz: item.title_uz,
       imageUrl: item.image_url,
       bannerType: item.banner_type ?? "image",
+      useTargetImage: item.use_target_image === 1,
       targetProductId: item.target_product_id ? String(item.target_product_id) : "",
       targetCategoryId: item.target_category_id ? String(item.target_category_id) : "",
       linkUrl: item.link_url ?? "",
@@ -124,7 +140,14 @@ export default function BannersPage() {
   };
 
   const submit = async () => {
-    if (!form.titleRu.trim() || !form.titleUz.trim() || !form.imageUrl.trim()) {
+    const requiresUploadedImage = !(
+      form.bannerType !== "image" && form.useTargetImage
+    );
+    if (
+      !form.titleRu.trim() ||
+      !form.titleUz.trim() ||
+      (requiresUploadedImage && !form.imageUrl.trim())
+    ) {
       setError("Заполните заголовки и загрузите картинку");
       return;
     }
@@ -144,6 +167,7 @@ export default function BannersPage() {
       titleUz: form.titleUz,
       imageUrl: form.imageUrl,
       bannerType: form.bannerType,
+      useTargetImage: form.bannerType === "image" ? false : form.useTargetImage,
       targetProductId:
         form.bannerType === "product"
           ? Number(form.targetProductId) || null
@@ -186,6 +210,23 @@ export default function BannersPage() {
     await fetch(`/api/banners/${id}`, { method: "DELETE" });
     load();
   };
+
+  const selectedProduct = products.find(
+    (product) => String(product.id) === form.targetProductId
+  );
+  const selectedCategory = categories.find(
+    (category) => String(category.id) === form.targetCategoryId
+  );
+  const filteredProducts = products.filter((product) => {
+    const query = productQuery.trim().toLowerCase();
+    if (!query) return true;
+    return product.title_ru.toLowerCase().includes(query);
+  });
+  const filteredCategories = categories.filter((category) => {
+    const query = categoryQuery.trim().toLowerCase();
+    if (!query) return true;
+    return category.name_ru.toLowerCase().includes(query);
+  });
 
   return (
     <div className="space-y-8">
@@ -244,6 +285,9 @@ export default function BannersPage() {
                       : item.banner_type === "category"
                         ? `Категория #${item.target_category_id ?? "—"}`
                         : item.link_url || "Целая картинка"}
+                    {item.banner_type !== "image" && item.use_target_image === 1
+                      ? " · фото из объекта"
+                      : ""}
                   </p>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -309,6 +353,7 @@ export default function BannersPage() {
                 setForm((prev) => ({
                   ...prev,
                   bannerType: event.target.value,
+                  useTargetImage: false,
                   targetProductId: "",
                   targetCategoryId: "",
                   linkUrl: "",
@@ -333,48 +378,144 @@ export default function BannersPage() {
               />
             </label>
           ) : form.bannerType === "product" ? (
-            <label className="text-sm font-semibold">
+            <div className="text-sm font-semibold">
               Товар
-              <select
-                value={form.targetProductId}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    targetProductId: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm font-medium text-[var(--ink)]"
-              >
-                <option value="">Выберите товар</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.title_ru}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="relative mt-2">
+                <button
+                  type="button"
+                  onClick={() => setProductOpen((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-left text-sm font-medium text-[var(--ink)]"
+                >
+                  <span>{selectedProduct?.title_ru ?? "Выберите товар"}</span>
+                  <span className="text-base">▾</span>
+                </button>
+
+                {productOpen ? (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-[var(--stroke)] bg-white shadow-[var(--shadow)]">
+                    <div className="p-3">
+                      <input
+                        value={productQuery}
+                        onChange={(event) => setProductQuery(event.target.value)}
+                        placeholder="Поиск товара..."
+                        className="w-full rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, targetProductId: "" }));
+                          setProductOpen(false);
+                        }}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-[var(--accent)]"
+                      >
+                        <span>Выберите товар</span>
+                      </button>
+                      {filteredProducts.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({
+                              ...prev,
+                              targetProductId: String(product.id),
+                            }));
+                            setProductOpen(false);
+                          }}
+                          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-[var(--accent)]"
+                        >
+                          <span>{product.title_ru}</span>
+                        </button>
+                      ))}
+                      {filteredProducts.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-[var(--muted)]">
+                          Ничего не найдено
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : (
-            <label className="text-sm font-semibold">
+            <div className="text-sm font-semibold">
               Категория
-              <select
-                value={form.targetCategoryId}
+              <div className="relative mt-2">
+                <button
+                  type="button"
+                  onClick={() => setCategoryOpen((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-left text-sm font-medium text-[var(--ink)]"
+                >
+                  <span>{selectedCategory?.name_ru ?? "Выберите категорию"}</span>
+                  <span className="text-base">▾</span>
+                </button>
+
+                {categoryOpen ? (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-[var(--stroke)] bg-white shadow-[var(--shadow)]">
+                    <div className="p-3">
+                      <input
+                        value={categoryQuery}
+                        onChange={(event) => setCategoryQuery(event.target.value)}
+                        placeholder="Поиск категории..."
+                        className="w-full rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, targetCategoryId: "" }));
+                          setCategoryOpen(false);
+                        }}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-[var(--accent)]"
+                      >
+                        <span>Выберите категорию</span>
+                      </button>
+                      {filteredCategories.map((category) => (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({
+                              ...prev,
+                              targetCategoryId: String(category.id),
+                            }));
+                            setCategoryOpen(false);
+                          }}
+                          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-[var(--accent)]"
+                        >
+                          <span>{category.name_ru}</span>
+                        </button>
+                      ))}
+                      {filteredCategories.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-[var(--muted)]">
+                          Ничего не найдено
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+          {form.bannerType !== "image" ? (
+            <label className="flex items-center gap-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={form.useTargetImage}
                 onChange={(event) =>
                   setForm((prev) => ({
                     ...prev,
-                    targetCategoryId: event.target.value,
+                    useTargetImage: event.target.checked,
                   }))
                 }
-                className="mt-2 w-full rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm font-medium text-[var(--ink)]"
-              >
-                <option value="">Выберите категорию</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name_ru}
-                  </option>
-                ))}
-              </select>
+                className="h-5 w-5 rounded border-[var(--stroke)] text-[var(--brand)]"
+              />
+              {form.bannerType === "product"
+                ? "Использовать фото товара"
+                : "Использовать фото категории"}
             </label>
-          )}
+          ) : null}
           <label className="text-sm font-semibold">
             Порядок
             <input
@@ -397,6 +538,7 @@ export default function BannersPage() {
             <input
               type="file"
               accept="image/*"
+              disabled={form.bannerType !== "image" && form.useTargetImage}
               onChange={async (event) => {
                 const file = event.target.files?.[0];
                 if (file) {
@@ -408,8 +550,13 @@ export default function BannersPage() {
                   reader.readAsDataURL(file);
                 }
               }}
-              className="mt-2 w-full rounded-2xl border border-dashed border-[var(--stroke)] bg-white px-4 py-3 text-sm text-[var(--muted)]"
+              className="mt-2 w-full rounded-2xl border border-dashed border-[var(--stroke)] bg-white px-4 py-3 text-sm text-[var(--muted)] disabled:cursor-not-allowed disabled:bg-[var(--soft)]"
             />
+            {form.bannerType !== "image" && form.useTargetImage ? (
+              <p className="mt-2 text-xs font-medium text-[var(--muted)]">
+                Картинка возьмётся из выбранного товара или категории.
+              </p>
+            ) : null}
           </label>
           <label className="flex items-center gap-3 text-sm font-semibold">
             <input
