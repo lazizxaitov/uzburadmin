@@ -66,7 +66,7 @@ async function posterGet<T>(
 async function posterPost<T>(
   settings: PosterSettings,
   method: string,
-  params?: Record<string, string | number>,
+  payload?: Record<string, unknown>,
 ) {
   if (!settings.account_name) {
     throw new Error("Missing Poster account name");
@@ -75,13 +75,8 @@ async function posterPost<T>(
     throw new Error("Missing Poster access token");
   }
 
-  const url = buildPosterUrl(settings.account_name, method);
-  const body = new URLSearchParams({
+  const url = buildPosterUrl(settings.account_name, method, {
     token: settings.access_token,
-    format: "json",
-    ...Object.fromEntries(
-      Object.entries(params ?? {}).map(([key, value]) => [key, String(value)]),
-    ),
   });
 
   const response = await fetch(url, {
@@ -89,16 +84,27 @@ async function posterPost<T>(
     cache: "no-store",
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
     },
-    body: body.toString(),
+    body: JSON.stringify(payload ?? {}),
   });
 
-  if (!response.ok) {
-    throw new Error(`Poster HTTP ${response.status}`);
+  const responseText = await response.text();
+  let data: PosterApiResponse<T> = {};
+  try {
+    data = JSON.parse(responseText) as PosterApiResponse<T>;
+  } catch {
+    if (!response.ok) {
+      throw new Error(`Poster HTTP ${response.status}: ${responseText.slice(0, 300)}`);
+    }
+    throw new Error("Poster вернул некорректный ответ");
   }
 
-  const data = (await response.json()) as PosterApiResponse<T>;
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message ?? `Poster HTTP ${response.status}: ${responseText.slice(0, 300)}`,
+    );
+  }
   if (data.error) {
     throw new Error(data.error.message ?? "Poster API error");
   }
@@ -125,8 +131,16 @@ export type PosterIncomingOrderPayload = {
   last_name: string;
   address: string;
   comment: string;
-  products: string;
-  payment?: string;
+  products: Array<{
+    product_id: number;
+    count: number;
+    price?: number;
+  }>;
+  payment?: {
+    type: number;
+    sum: number;
+    currency: string;
+  };
 };
 
 export async function createPosterIncomingOrder(

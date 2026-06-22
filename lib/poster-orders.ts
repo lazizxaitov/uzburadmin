@@ -119,12 +119,16 @@ export async function sendOrderToPoster(prepared: PreparedOrder): Promise<Poster
       last_name: lastName,
       address: prepared.addressText,
       comment: `Uzbur ${prepared.externalId}`,
-      products: JSON.stringify(productsPayload),
-      ...(paymentPayload ? { payment: JSON.stringify(paymentPayload) } : {}),
+      products: productsPayload,
+      ...(paymentPayload ? { payment: paymentPayload } : {}),
     });
 
     const incomingOrderId = String(response?.["incoming_order_id"] ?? "");
     const transactionId = String(response?.["transaction_id"] ?? "");
+
+    if (!incomingOrderId) {
+      throw new Error("Poster не вернул incoming_order_id");
+    }
 
     return {
       ok: true,
