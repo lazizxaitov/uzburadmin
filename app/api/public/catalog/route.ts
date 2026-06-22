@@ -25,28 +25,17 @@ export async function GET() {
   const banners = db
     .prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC")
     .all() as Array<Record<string, unknown>>;
-  const demoMode = (settings?.catalog_mode ?? "real") === "demo";
   const categories = db.prepare(
-    demoMode
-      ? "SELECT * FROM categories WHERE poster_id = 'demo-category' ORDER BY sort_order ASC, created_at DESC"
-      : "SELECT * FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC"
+    "SELECT * FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC"
   ).all() as Array<Record<string, unknown>>;
   const products = db.prepare(
-    demoMode
-      ? `
-        SELECT p.*, c.name_ru as category_name_ru, c.name_uz as category_name_uz
-        FROM products p
-        LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.poster_id = 'demo-product'
-        ORDER BY p.created_at DESC
-      `
-      : `
-        SELECT p.*, c.name_ru as category_name_ru, c.name_uz as category_name_uz
-        FROM products p
-        LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.is_active = 1 AND (p.category_id IS NULL OR c.is_active = 1)
-        ORDER BY p.created_at DESC
-      `
+    `
+      SELECT p.*, c.name_ru as category_name_ru, c.name_uz as category_name_uz
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE p.is_active = 1 AND (p.category_id IS NULL OR c.is_active = 1)
+      ORDER BY p.created_at DESC
+    `
   ).all() as Array<Record<string, unknown>>;
   const images = db.prepare("SELECT product_id, url FROM product_images ORDER BY sort_order ASC").all() as Array<{ product_id: number; url: string }>;
   const portionRows = db

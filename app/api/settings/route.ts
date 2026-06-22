@@ -66,7 +66,7 @@ export async function PUT(request: Request) {
     body?.splashSubtitleRu?.toString()?.trim() ?? "",
     body?.splashSubtitleUz?.toString()?.trim() ?? "",
     body?.splashShowOnce === false ? 0 : 1,
-    body?.catalogMode === "demo" ? "demo" : "real",
+    "real",
     body?.mobileApiKey?.toString()?.trim() ?? "",
     body?.plumBaseUrl?.toString()?.trim() || "https://pay.myuzcard.uz",
     body?.plumUsername?.toString()?.trim() ?? "",

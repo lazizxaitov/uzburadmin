@@ -172,7 +172,7 @@ export default function SettingsPage() {
           splashSubtitleRu: form.splash_subtitle_ru,
           splashSubtitleUz: form.splash_subtitle_uz,
           splashShowOnce: form.splash_show_once === 1,
-          catalogMode: form.catalog_mode,
+          catalogMode: "real",
           mobileApiKey: form.mobile_api_key,
           plumBaseUrl: form.plum_base_url,
           plumUsername: form.plum_username,
@@ -309,12 +309,6 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
-      {form.catalog_mode === "demo" ? (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-          Сейчас включен DEMO режим. Мобильное приложение получает шаблонные категорию и товар вместо реального каталога.
-        </div>
-      ) : null}
-
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="space-y-4">
           <SectionTitle title="Приложение" subtitle="Публичные данные для мобильного клиента." />
@@ -346,11 +340,6 @@ export default function SettingsPage() {
               <input value={form.mobile_api_key} onChange={(e) => setForm({ ...form, mobile_api_key: e.target.value })} className={inputClass} />
             </Field>
           </div>
-          <SwitchRow
-            label="Использовать демо товары вместо реальных"
-            checked={form.catalog_mode === "demo"}
-            onChange={(checked) => setForm({ ...form, catalog_mode: checked ? "demo" : "real" })}
-          />
         </Card>
 
         <Card className="space-y-4">

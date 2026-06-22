@@ -347,85 +347,9 @@ db.prepare(`
   now,
 );
 
-const demoCategorySlug = "demo-burgers";
-const demoCategory = db
-  .prepare("SELECT id FROM categories WHERE slug = ?")
-  .get(demoCategorySlug) as { id: number } | undefined;
-
-let demoCategoryId = demoCategory?.id ?? 0;
-
-if (!demoCategoryId) {
-  const categoryInsert = db
-    .prepare(
-      `INSERT INTO categories
-       (poster_id, name_ru, name_uz, slug, image_url, sort_order, is_active, synced_from_poster, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      "demo-category",
-      "Бургеры",
-      "Burgerlar",
-      demoCategorySlug,
-      "https://storage.googleapis.com/uxpilot-auth.appspot.com/ae7200cc90-a1e0c325e866593778d7.png",
-      1,
-      1,
-      0,
-      now,
-      now,
-    );
-  demoCategoryId = Number(categoryInsert.lastInsertRowid);
-}
-
-const demoProduct = db
-  .prepare("SELECT id FROM products WHERE poster_id = ?")
-  .get("demo-product") as { id: number } | undefined;
-
-let demoProductId = demoProduct?.id ?? 0;
-
-if (!demoProductId) {
-  const productInsert = db
-    .prepare(
-      `INSERT INTO products
-       (poster_id, category_id, title_ru, title_uz, description_title_ru, description_title_uz,
-        description_text_ru, description_text_uz, price, price_text_ru, price_text_uz,
-        pricing_mode, stock, is_active, synced_from_poster, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      "demo-product",
-      demoCategoryId,
-      "Классический бургер",
-      "Klassik burger",
-      "Описание",
-      "Tavsif",
-      "Сочная говяжья котлета, сыр и свежие овощи.",
-      "Sersuv mol go‘shti kotleti, pishloq va yangi sabzavotlar.",
-      35000,
-      "35 000 сум",
-      "35 000 so‘m",
-      "quantity",
-      999,
-      1,
-      0,
-      now,
-      now,
-    );
-  demoProductId = Number(productInsert.lastInsertRowid);
-}
-
-const demoImageExists = db
-  .prepare("SELECT id FROM product_images WHERE product_id = ? LIMIT 1")
-  .get(demoProductId) as { id: number } | undefined;
-
-if (!demoImageExists) {
-  db.prepare(
-    "INSERT INTO product_images (product_id, url, sort_order) VALUES (?, ?, ?)"
-  ).run(
-    demoProductId,
-    "https://storage.googleapis.com/uxpilot-auth.appspot.com/ae7200cc90-a1e0c325e866593778d7.png",
-    0,
-  );
-}
+db.prepare("DELETE FROM products WHERE poster_id = 'demo-product'").run();
+db.prepare("DELETE FROM categories WHERE poster_id = 'demo-category'").run();
+db.prepare("UPDATE settings SET catalog_mode = 'real' WHERE catalog_mode = 'demo'").run();
 
 db.prepare(`
   INSERT INTO poster_settings (
