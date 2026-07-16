@@ -189,25 +189,33 @@ function firstValidNumber(values: unknown[], fallback = 0): number {
   return fallback;
 }
 
+function fromPosterMoney(value: unknown, fallback = 0) {
+  const parsed = toNumber(value, Number.NaN);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.round(parsed / 100);
+}
+
 function extractProductPrice(raw: Record<string, unknown>) {
-  return firstValidNumber(
-    [
-      raw.price,
-      raw.menu_price,
-      raw.product_price,
-      raw.base_price,
-      raw.price1,
-      raw.cost,
-      raw.spots,
-      raw.spot_prices,
-      raw.prices,
-      raw.price_list,
-      raw.variation_prices,
-      raw.modifications,
-      raw.portions,
-      raw.sizes,
-    ],
-    0,
+  return fromPosterMoney(
+    firstValidNumber(
+      [
+        raw.price,
+        raw.menu_price,
+        raw.product_price,
+        raw.base_price,
+        raw.price1,
+        raw.cost,
+        raw.spots,
+        raw.spot_prices,
+        raw.prices,
+        raw.price_list,
+        raw.variation_prices,
+        raw.modifications,
+        raw.portions,
+        raw.sizes,
+      ],
+      0,
+    ),
   );
 }
 
@@ -216,14 +224,13 @@ function normalizePortionOption(raw: Record<string, unknown>): PortionOption | n
   const labelUz = pickLocalized(raw, ["label", "name", "title", "modification_name", "group_name", "spot_name", "portion_name", "size_name"], "uz") || labelRu;
   if (!labelRu && !labelUz) return null;
 
-  const price = toNumber(
+  const price = fromPosterMoney(
     raw.price ??
       raw.price1 ??
       raw.extra_price ??
       raw.modification_price ??
       raw.spot_price ??
       raw.cost,
-    0,
   );
 
   return {
