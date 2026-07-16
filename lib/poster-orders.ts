@@ -31,7 +31,7 @@ function splitName(fullName: string) {
 }
 
 function toPosterMoney(value: number) {
-  return Math.round(Number(value || 0) * 100);
+  return Math.round(Number(value || 0));
 }
 
 export async function sendOrderToPoster(prepared: PreparedOrder): Promise<PosterOrderSyncResult> {
