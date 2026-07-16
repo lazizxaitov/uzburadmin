@@ -192,12 +192,12 @@ function firstValidNumber(values: unknown[], fallback = 0): number {
 function extractProductPrice(raw: Record<string, unknown>) {
   return firstValidNumber(
     [
-      raw.price1,
       raw.price,
-      raw.cost,
       raw.menu_price,
       raw.product_price,
       raw.base_price,
+      raw.cost,
+      raw.price1,
       raw.spots,
       raw.spot_prices,
       raw.prices,
