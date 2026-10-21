@@ -21,7 +21,8 @@ export async function PUT(request: Request) {
   const body = await request.json().catch(() => null);
   getDb().prepare(`
     UPDATE iiko_settings SET
-      base_url = ?, api_login = ?, organization_id = ?, terminal_group_id = ?,
+      base_url = ?, app_id = ?, client_secret = ?, api_login = ?,
+      organization_id = ?, terminal_group_id = ?,
       order_type_id = ?, payment_type_id = ?, payment_type_kind = ?,
       import_categories = ?, import_products = ?, import_images = ?,
       auto_sync_enabled = ?, auto_sync_interval_minutes = ?,
@@ -29,7 +30,9 @@ export async function PUT(request: Request) {
     WHERE id = 1
   `).run(
     body?.baseUrl?.toString().trim() || "https://api-ru.iiko.services",
-    body?.apiLogin?.toString().trim() || "",
+    body?.appId?.toString().trim() || "",
+    body?.clientSecret?.toString().trim() || "",
+    body?.apiKey?.toString().trim() || body?.apiLogin?.toString().trim() || "",
     body?.organizationId?.toString().trim() || "",
     body?.terminalGroupId?.toString().trim() || "",
     body?.orderTypeId?.toString().trim() || "",
@@ -53,6 +56,8 @@ export async function POST() {
   const db = getDb();
   const settings = db.prepare("SELECT * FROM iiko_settings WHERE id = 1").get() as {
     base_url: string;
+    app_id: string;
+    client_secret: string;
     api_login: string;
     organization_id: string;
     terminal_group_id: string;

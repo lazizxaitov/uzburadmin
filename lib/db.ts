@@ -174,6 +174,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS iiko_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     base_url TEXT NOT NULL DEFAULT 'https://api-ru.iiko.services',
+    app_id TEXT NOT NULL DEFAULT '',
+    client_secret TEXT NOT NULL DEFAULT '',
     api_login TEXT NOT NULL DEFAULT '',
     organization_id TEXT NOT NULL DEFAULT '',
     terminal_group_id TEXT NOT NULL DEFAULT '',
@@ -385,6 +387,8 @@ ensureColumn("products", "iiko_id", "TEXT");
 ensureColumn("products", "synced_from_iiko", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("categories", "iiko_id", "TEXT");
 ensureColumn("categories", "synced_from_iiko", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("iiko_settings", "app_id", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("iiko_settings", "client_secret", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("poster_settings", "auto_sync_enabled", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn(
   "poster_settings",

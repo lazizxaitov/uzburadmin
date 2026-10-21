@@ -65,6 +65,8 @@ type PosterSettings = {
 
 type IikoSettings = {
   base_url: string;
+  app_id: string;
+  client_secret: string;
   api_login: string;
   organization_id: string;
   terminal_group_id: string;
@@ -142,6 +144,8 @@ export default function SettingsPage() {
   });
   const [iiko, setIiko] = useState<IikoSettings>({
     base_url: "https://api-ru.iiko.services",
+    app_id: "",
+    client_secret: "",
     api_login: "",
     organization_id: "",
     terminal_group_id: "",
@@ -272,7 +276,9 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           baseUrl: iiko.base_url,
-          apiLogin: iiko.api_login,
+          appId: iiko.app_id,
+          clientSecret: iiko.client_secret,
+          apiKey: iiko.api_login,
           organizationId: iiko.organization_id,
           terminalGroupId: iiko.terminal_group_id,
           orderTypeId: iiko.order_type_id,
@@ -766,9 +772,20 @@ export default function SettingsPage() {
           <Field label="API URL">
             <input value={iiko.base_url} onChange={(e) => setIiko({ ...iiko, base_url: e.target.value })} className={inputClass} />
           </Field>
-          <Field label="API Login">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="App ID">
+              <input value={iiko.app_id} onChange={(e) => setIiko({ ...iiko, app_id: e.target.value })} className={inputClass} />
+            </Field>
+            <Field label="Client Secret">
+              <input type="password" value={iiko.client_secret} onChange={(e) => setIiko({ ...iiko, client_secret: e.target.value })} className={inputClass} />
+            </Field>
+          </div>
+          <Field label="API Key">
             <input type="password" value={iiko.api_login} onChange={(e) => setIiko({ ...iiko, api_login: e.target.value })} className={inputClass} />
           </Field>
+          <p className="text-xs text-[var(--muted)]">
+            App ID и Client Secret берутся из портала разработчика iiko, API Key — из iikoWeb. Авторизация использует `/api/v2/access_token`.
+          </p>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Organization ID">
               <input value={iiko.organization_id} onChange={(e) => setIiko({ ...iiko, organization_id: e.target.value })} className={inputClass} />

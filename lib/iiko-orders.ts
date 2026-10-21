@@ -10,6 +10,8 @@ type IikoOrderSyncResult =
 
 type IikoOrderSettings = {
   base_url: string;
+  app_id: string;
+  client_secret: string;
   api_login: string;
   organization_id: string;
   terminal_group_id: string;

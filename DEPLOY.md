@@ -113,12 +113,13 @@ pm2 restart uzburadmin
 
 ## iikoCloud
 
-1. Create an API login in iikoWeb and copy its API key.
-2. Open `Настройки` → `iiko` in the admin panel.
-3. Enter the API Login and save settings.
-4. Click `Проверить iiko`. The organization, terminal group, delivery order type, and payment type IDs are filled automatically.
-5. Click `Синхронизировать iiko` to import the menu.
-6. Enable `Отправлять заказы в iiko` only after the test order is accepted by the selected terminal group.
+1. Create an application in the iiko developer portal and copy its App ID and Client Secret.
+2. Create an API key in iikoWeb (`Integrations` → `API Keys`).
+3. Open `Настройки` → `iiko` in the admin panel.
+4. Enter the App ID, Client Secret, and API Key, then save settings.
+5. Click `Проверить iiko`. The organization, terminal group, delivery order type, and payment type IDs are filled automatically.
+6. Click `Синхронизировать iiko` to import the menu.
+7. Enable `Отправлять заказы в iiko` only after the test order is accepted by the selected terminal group.
 
 Keep Poster order export disabled if orders should be sent only to iiko.
 

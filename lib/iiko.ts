@@ -2,6 +2,8 @@ import "server-only";
 
 export type IikoSettings = {
   base_url: string;
+  app_id: string;
+  client_secret: string;
   api_login: string;
   organization_id?: string;
 };
@@ -16,7 +18,7 @@ type IikoErrorResponse = {
   error?: string;
 };
 
-let cachedToken: { apiLogin: string; token: string; expiresAt: number } | null = null;
+let cachedToken: { credentialsKey: string; token: string; expiresAt: number } | null = null;
 
 function baseUrl(settings: IikoSettings) {
   return (settings.base_url || "https://api-ru.iiko.services").replace(/\/$/, "");
@@ -57,11 +59,16 @@ async function post<T>(
 }
 
 export async function getIikoToken(settings: IikoSettings) {
-  const apiLogin = settings.api_login.trim();
-  if (!apiLogin) throw new Error("Укажите API Login iiko");
+  const appId = settings.app_id.trim();
+  const clientSecret = settings.client_secret.trim();
+  const apiKey = settings.api_login.trim();
+  if (!appId || !clientSecret || !apiKey) {
+    throw new Error("Укажите App ID, Client Secret и API Key iiko");
+  }
+  const credentialsKey = `${baseUrl(settings)}\n${appId}\n${clientSecret}\n${apiKey}`;
 
   if (
-    cachedToken?.apiLogin === apiLogin &&
+    cachedToken?.credentialsKey === credentialsKey &&
     cachedToken.expiresAt > Date.now() + 60_000
   ) {
     return cachedToken.token;
@@ -69,11 +76,11 @@ export async function getIikoToken(settings: IikoSettings) {
 
   const result = await post<IikoTokenResponse>(
     settings,
-    "/api/1/access_token",
-    { apiLogin },
+    "/api/v2/access_token",
+    { appId, clientSecret, apiKey },
   );
   cachedToken = {
-    apiLogin,
+    credentialsKey,
     token: result.token,
     expiresAt: Date.now() + 55 * 60_000,
   };

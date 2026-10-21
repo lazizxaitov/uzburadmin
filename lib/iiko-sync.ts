@@ -6,6 +6,8 @@ import { slugify } from "@/lib/slug";
 
 type IikoSettingsRow = {
   base_url: string;
+  app_id: string;
+  client_secret: string;
   api_login: string;
   organization_id: string;
   import_categories: number;
@@ -91,8 +93,8 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
   syncInFlight = (async () => {
     const db = getDb();
     const settings = getSettings();
-    if (!settings.api_login || !settings.organization_id) {
-      throw new Error("Укажите API Login и Organization ID iiko");
+    if (!settings.app_id || !settings.client_secret || !settings.api_login || !settings.organization_id) {
+      throw new Error("Укажите App ID, Client Secret, API Key и Organization ID iiko");
     }
 
     const now = nowIso();
@@ -267,7 +269,13 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
 
 export async function maybeAutoSyncIiko() {
   const settings = getSettings();
-  if (settings.auto_sync_enabled !== 1 || !settings.api_login || !settings.organization_id) return;
+  if (
+    settings.auto_sync_enabled !== 1 ||
+    !settings.app_id ||
+    !settings.client_secret ||
+    !settings.api_login ||
+    !settings.organization_id
+  ) return;
   const interval = Math.max(1, Number(settings.auto_sync_interval_minutes || 30));
   const lastSync = settings.last_sync_at ? Date.parse(settings.last_sync_at) : 0;
   if (lastSync && Date.now() - lastSync < interval * 60_000) return;
