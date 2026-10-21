@@ -85,6 +85,16 @@ type IikoSettings = {
   last_sync_error: string;
 };
 
+type SaveSection =
+  | "all"
+  | "application"
+  | "splash"
+  | "plum"
+  | "eskiz"
+  | "cashier"
+  | "poster"
+  | "iiko";
+
 export default function SettingsPage() {
   const [form, setForm] = useState<Settings>({
     cafe_name: "",
@@ -164,7 +174,12 @@ export default function SettingsPage() {
     last_sync_error: "",
   });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingSection, setSavingSection] = useState<SaveSection | null>(null);
+  const [saveResult, setSaveResult] = useState<{
+    section: SaveSection;
+    ok: boolean;
+    text: string;
+  } | null>(null);
   const [testing, setTesting] = useState(false);
   const [testingPlum, setTestingPlum] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -207,11 +222,22 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  const save = async () => {
-    setSaving(true);
+  const save = async (section: SaveSection = "all") => {
+    setSavingSection(section);
+    setSaveResult(null);
     setMessage("");
-    const responses = await Promise.all([
-      fetch("/api/settings", {
+    const requests: Array<Promise<Response>> = [];
+    const savesGeneralSettings = [
+      "all",
+      "application",
+      "splash",
+      "plum",
+      "eskiz",
+      "cashier",
+    ].includes(section);
+
+    if (savesGeneralSettings) {
+      requests.push(fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -251,8 +277,11 @@ export default function SettingsPage() {
           cashierUsername: form.cashier_username,
           cashierPassword: form.cashier_password,
         }),
-      }),
-      fetch("/api/poster/settings", {
+      }));
+    }
+
+    if (section === "all" || section === "poster") {
+      requests.push(fetch("/api/poster/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -270,8 +299,11 @@ export default function SettingsPage() {
           sendOrdersToPoster: poster.send_orders_to_poster === 1,
           orderSpotId: poster.order_spot_id,
         }),
-      }),
-      fetch("/api/iiko/settings", {
+      }));
+    }
+
+    if (section === "all" || section === "iiko") {
+      requests.push(fetch("/api/iiko/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -291,18 +323,25 @@ export default function SettingsPage() {
           autoSyncIntervalMinutes: iiko.auto_sync_interval_minutes,
           sendOrdersToIiko: iiko.send_orders_to_iiko === 1,
         }),
-      }),
-    ]);
-    const failedResponse = responses.find((response) => !response.ok);
-    if (failedResponse) {
-      const error = await failedResponse.json().catch(() => null);
-      setSaving(false);
-      setMessage(error?.error ?? "Не удалось сохранить настройки");
-      return;
+      }));
     }
-    setSaving(false);
-    setMessage("Сохранено");
-    load();
+
+    try {
+      const responses = await Promise.all(requests);
+      const failedResponse = responses.find((response) => !response.ok);
+      if (failedResponse) {
+        const error = await failedResponse.json().catch(() => null);
+        throw new Error(error?.error ?? "Не удалось сохранить настройки");
+      }
+      setSaveResult({ section, ok: true, text: "Сохранено" });
+      setMessage("Сохранено");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Не удалось сохранить настройки";
+      setSaveResult({ section, ok: false, text });
+      setMessage(text);
+    } finally {
+      setSavingSection(null);
+    }
   };
 
   const testConnection = async () => {
@@ -415,8 +454,8 @@ export default function SettingsPage() {
       />
 
       <div className="flex flex-wrap gap-3">
-        <PrimaryButton onClick={save} disabled={saving}>
-          {saving ? "Сохранение..." : "Сохранить"}
+        <PrimaryButton onClick={() => save("all")} disabled={savingSection !== null}>
+          {savingSection === "all" ? "Сохранение..." : "Сохранить всё"}
         </PrimaryButton>
         <GhostButton onClick={load}>Обновить</GhostButton>
       </div>
@@ -503,6 +542,7 @@ export default function SettingsPage() {
               <input value={form.mobile_api_key} onChange={(e) => setForm({ ...form, mobile_api_key: e.target.value })} className={inputClass} />
             </Field>
           </div>
+          <SectionSaveControls section="application" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
 
         <Card className="space-y-4">
@@ -572,6 +612,7 @@ export default function SettingsPage() {
             checked={form.splash_show_once === 1}
             onChange={(checked) => setForm({ ...form, splash_show_once: checked ? 1 : 0 })}
           />
+          <SectionSaveControls section="splash" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
 
         <Card className="space-y-4">
@@ -620,6 +661,7 @@ export default function SettingsPage() {
               {testingPlum ? "Проверка Plum..." : "Проверить Plum"}
             </PrimaryButton>
           </div>
+          <SectionSaveControls section="plum" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
 
         <Card className="space-y-4">
@@ -668,6 +710,7 @@ export default function SettingsPage() {
               {testingEskiz ? "Проверка Eskiz..." : "Проверить Eskiz"}
             </PrimaryButton>
           </div>
+          <SectionSaveControls section="eskiz" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
 
         <Card className="space-y-4">
@@ -690,6 +733,7 @@ export default function SettingsPage() {
           <p className="text-xs text-[var(--muted)]">
             Эти данные используются кассиром для входа и обработки заказов: принять, отклонить, отправить, завершить.
           </p>
+          <SectionSaveControls section="cashier" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
 
         <Card className="space-y-4">
@@ -765,6 +809,7 @@ export default function SettingsPage() {
               {syncing ? "Синхронизация..." : "Синхронизировать"}
             </PrimaryButton>
           </div>
+          <SectionSaveControls section="poster" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
 
         <Card className="space-y-4">
@@ -825,6 +870,7 @@ export default function SettingsPage() {
               {syncingIiko ? "Синхронизация..." : "Синхронизировать iiko"}
             </PrimaryButton>
           </div>
+          <SectionSaveControls section="iiko" onSave={save} savingSection={savingSection} saveResult={saveResult} />
         </Card>
       </div>
 
@@ -850,6 +896,32 @@ export default function SettingsPage() {
           setCropSrc(null);
         }}
       />
+    </div>
+  );
+}
+
+function SectionSaveControls({
+  section,
+  onSave,
+  savingSection,
+  saveResult,
+}: {
+  section: SaveSection;
+  onSave: (section: SaveSection) => Promise<void>;
+  savingSection: SaveSection | null;
+  saveResult: { section: SaveSection; ok: boolean; text: string } | null;
+}) {
+  const result = saveResult?.section === section ? saveResult : null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--stroke)] pt-4">
+      <span
+        className={`text-sm font-semibold ${result?.ok === false ? "text-red-600" : "text-[var(--muted)]"}`}
+      >
+        {result?.text ?? ""}
+      </span>
+      <PrimaryButton onClick={() => onSave(section)} disabled={savingSection !== null}>
+        {savingSection === section ? "Сохранение..." : "Сохранить"}
+      </PrimaryButton>
     </div>
   );
 }
