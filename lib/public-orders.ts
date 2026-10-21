@@ -1,4 +1,5 @@
 import { getDb, nowIso } from "@/lib/db";
+import { validateDelivery } from "@/lib/delivery-validation";
 
 export type OrderItemInput = {
   productId: number;
@@ -49,6 +50,10 @@ export type OrderSyncMeta = {
   posterTransactionId?: string;
   posterSyncStatus?: string;
   posterSyncError?: string;
+  iikoOrderId?: string;
+  iikoCorrelationId?: string;
+  iikoSyncStatus?: string;
+  iikoSyncError?: string;
 };
 
 function toPositiveInt(value: unknown) {
@@ -103,16 +108,28 @@ export function preparePublicOrder(body: unknown):
 
   const db = getDb();
   const settings = db.prepare(`
-    SELECT delivery_fee, min_order, bonus_percent
+    SELECT delivery_fee, min_order, bonus_enabled, bonus_percent, work_hours,
+           delivery_zone_enabled, delivery_center_lat, delivery_center_lng, delivery_radius_km
     FROM settings
     WHERE id = 1
   `).get() as
     | {
         delivery_fee?: number;
         min_order?: number;
+        bonus_enabled?: number;
         bonus_percent?: number;
+        work_hours?: string;
+        delivery_zone_enabled?: number;
+        delivery_center_lat?: number;
+        delivery_center_lng?: number;
+        delivery_radius_km?: number;
       }
     | undefined;
+
+  const deliveryValidation = validateDelivery(address, settings ?? {});
+  if (!deliveryValidation.ok) {
+    return { ok: false, status: 400, error: deliveryValidation.error };
+  }
 
   const productIds = [...new Set(items.map((item: OrderItemInput) => item.productId))];
   const products = db.prepare(`
@@ -159,8 +176,10 @@ export function preparePublicOrder(body: unknown):
 
   const deliveryFee = Number(settings?.delivery_fee ?? 0);
   const total = subtotal + deliveryFee;
-  const bonusPercent = Number(settings?.bonus_percent ?? 0);
-  const bonusEarned = Math.round(subtotal * (bonusPercent / 100));
+  const bonusPercent = Number(settings?.bonus_enabled ?? 1) === 1
+    ? Number(settings?.bonus_percent ?? 0)
+    : 0;
+  const bonusEarned = Math.round(total * (bonusPercent / 100));
 
   return {
     ok: true,
@@ -191,9 +210,10 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
         subtotal, delivery_fee, total, bonus_earned, source, payment_method, payment_provider,
         payment_status, payment_transaction_id, payment_session, payment_card_mask,
         poster_incoming_order_id, poster_transaction_id, poster_sync_status, poster_sync_error,
+        iiko_order_id, iiko_correlation_id, iiko_sync_status, iiko_sync_error,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, 'mobile', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, 'mobile', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       prepared.externalId,
       prepared.customerName,
@@ -213,6 +233,10 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
       syncMeta.posterTransactionId?.trim() || "",
       syncMeta.posterSyncStatus?.trim() || "",
       syncMeta.posterSyncError?.trim() || "",
+      syncMeta.iikoOrderId?.trim() || "",
+      syncMeta.iikoCorrelationId?.trim() || "",
+      syncMeta.iikoSyncStatus?.trim() || "",
+      syncMeta.iikoSyncError?.trim() || "",
       now,
       now
     );
@@ -246,7 +270,6 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
             WHEN excluded.full_name != '' THEN excluded.full_name
             ELSE customers.full_name
           END,
-          bonus_balance = customers.bonus_balance + excluded.bonus_balance,
           total_spent = customers.total_spent + excluded.total_spent,
           total_orders = customers.total_orders + 1,
           is_active = 1,
@@ -254,7 +277,7 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
       `).run(
         prepared.customerName,
         prepared.customerPhone,
-        prepared.bonusEarned,
+        0,
         prepared.total,
         now,
         now
@@ -280,6 +303,9 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
     posterIncomingOrderId: syncMeta.posterIncomingOrderId?.trim() || "",
     posterTransactionId: syncMeta.posterTransactionId?.trim() || "",
     posterSyncStatus: syncMeta.posterSyncStatus?.trim() || "",
+    iikoOrderId: syncMeta.iikoOrderId?.trim() || "",
+    iikoCorrelationId: syncMeta.iikoCorrelationId?.trim() || "",
+    iikoSyncStatus: syncMeta.iikoSyncStatus?.trim() || "",
     items: prepared.normalizedItems,
     payment: {
       method: prepared.payment.method?.toString().trim() || "cash",

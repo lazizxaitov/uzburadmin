@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
 import { getDb, nowIso } from "@/lib/db";
+import { validateDeliveryConfiguration } from "@/lib/delivery-validation";
 
 export const runtime = "nodejs";
 
@@ -27,10 +28,28 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Missing cafe name" }, { status: 400 });
   }
 
+  const workHours = body?.workHours?.toString()?.trim() ?? "";
+  const deliveryZoneEnabled = body?.deliveryZoneEnabled === true;
+  const deliveryCenterLat = Number(body?.deliveryCenterLat ?? 41.3111);
+  const deliveryCenterLng = Number(body?.deliveryCenterLng ?? 69.2797);
+  const deliveryRadiusKm = Number(body?.deliveryRadiusKm ?? 10);
+  const deliveryConfigError = validateDeliveryConfiguration({
+    work_hours: workHours,
+    delivery_zone_enabled: deliveryZoneEnabled ? 1 : 0,
+    delivery_center_lat: deliveryCenterLat,
+    delivery_center_lng: deliveryCenterLng,
+    delivery_radius_km: deliveryRadiusKm,
+  });
+  if (deliveryConfigError) {
+    return NextResponse.json({ error: deliveryConfigError }, { status: 400 });
+  }
+
   getDb().prepare(`
     UPDATE settings
-    SET cafe_name = ?, phone = ?, address = ?, work_hours = ?, delivery_fee = ?,
-        min_order = ?, currency = ?, bonus_percent = ?, bonus_redeem_amount = ?,
+    SET cafe_name = ?, phone = ?, address = ?, work_hours = ?,
+        delivery_zone_enabled = ?, delivery_center_lat = ?, delivery_center_lng = ?, delivery_radius_km = ?,
+        delivery_fee = ?,
+        min_order = ?, currency = ?, bonus_enabled = ?, bonus_percent = ?, bonus_redeem_amount = ?,
         card_payment_enabled = ?, cash_payment_enabled = ?, card_payment_text = ?,
         payme_qr_image_url = ?, click_qr_image_url = ?, support_phone = ?,
         instagram = ?, telegram = ?, splash_image_url = ?, splash_title_ru = ?,
@@ -46,11 +65,16 @@ export async function PUT(request: Request) {
     cafeName,
     body?.phone?.toString()?.trim() ?? "",
     body?.address?.toString()?.trim() ?? "",
-    body?.workHours?.toString()?.trim() ?? "",
+    workHours,
+    deliveryZoneEnabled ? 1 : 0,
+    deliveryCenterLat,
+    deliveryCenterLng,
+    deliveryRadiusKm,
     Number(body?.deliveryFee ?? 0),
     Number(body?.minOrder ?? 0),
     body?.currency?.toString()?.trim() ?? "сум",
-    Number(body?.bonusPercent ?? 0),
+    body?.bonusEnabled === false ? 0 : 1,
+    Math.min(100, Math.max(0, Number(body?.bonusPercent ?? 0) || 0)),
     Number(body?.bonusRedeemAmount ?? 0),
     body?.cardPaymentEnabled === false ? 0 : 1,
     body?.cashPaymentEnabled === false ? 0 : 1,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { sendOrderToPoster } from "@/lib/poster-orders";
+import { sendOrderToIiko } from "@/lib/iiko-orders";
 import { createPublicOrder, preparePublicOrder } from "@/lib/public-orders";
 import { plumConfirmPayment } from "@/lib/plum";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
@@ -50,7 +51,10 @@ export async function POST(request: Request) {
         cardNumber: payment.cardNumber?.toString().trim() || "",
       },
     };
-    const posterSync = await sendOrderToPoster(orderPayload);
+    const [posterSync, iikoSync] = await Promise.all([
+      sendOrderToPoster(orderPayload),
+      sendOrderToIiko(orderPayload),
+    ]);
     const order = createPublicOrder(orderPayload, {
       posterIncomingOrderId: posterSync.ok ? posterSync.incomingOrderId : "",
       posterTransactionId: posterSync.ok ? posterSync.transactionId : "",
@@ -59,12 +63,17 @@ export async function POST(request: Request) {
         posterSync.status === "success"
           ? ""
           : posterSync.message,
+      iikoOrderId: iikoSync.ok ? iikoSync.orderId : "",
+      iikoCorrelationId: iikoSync.ok ? iikoSync.correlationId : "",
+      iikoSyncStatus: iikoSync.status,
+      iikoSyncError: iikoSync.status === "success" ? "" : iikoSync.message,
     });
     return NextResponse.json({
       ok: true,
       payment,
       order,
       posterSync,
+      iikoSync,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка подтверждения оплаты";

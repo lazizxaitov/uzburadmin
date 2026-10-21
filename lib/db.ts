@@ -23,13 +23,16 @@ function ensureColumn(table: string, column: string, definition: string) {
         throw error;
       }
     }
+    return true;
   }
+  return false;
 }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     poster_id TEXT UNIQUE,
+    iiko_id TEXT UNIQUE,
     name_ru TEXT NOT NULL,
     name_uz TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
@@ -37,6 +40,7 @@ db.exec(`
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     synced_from_poster INTEGER NOT NULL DEFAULT 0,
+    synced_from_iiko INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -44,6 +48,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     poster_id TEXT UNIQUE,
+    iiko_id TEXT UNIQUE,
     category_id INTEGER,
     title_ru TEXT NOT NULL,
     title_uz TEXT NOT NULL,
@@ -58,6 +63,7 @@ db.exec(`
     stock INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     synced_from_poster INTEGER NOT NULL DEFAULT 0,
+    synced_from_iiko INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
@@ -102,9 +108,14 @@ db.exec(`
     phone TEXT NOT NULL DEFAULT '',
     address TEXT NOT NULL DEFAULT '',
     work_hours TEXT NOT NULL DEFAULT '',
+    delivery_zone_enabled INTEGER NOT NULL DEFAULT 0,
+    delivery_center_lat REAL NOT NULL DEFAULT 41.3111,
+    delivery_center_lng REAL NOT NULL DEFAULT 69.2797,
+    delivery_radius_km REAL NOT NULL DEFAULT 10,
     delivery_fee INTEGER NOT NULL DEFAULT 0,
     min_order INTEGER NOT NULL DEFAULT 0,
     currency TEXT NOT NULL DEFAULT 'сум',
+    bonus_enabled INTEGER NOT NULL DEFAULT 1,
     bonus_percent REAL NOT NULL DEFAULT 0,
     bonus_redeem_amount INTEGER NOT NULL DEFAULT 0,
     card_payment_enabled INTEGER NOT NULL DEFAULT 1,
@@ -160,6 +171,29 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS iiko_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    base_url TEXT NOT NULL DEFAULT 'https://api-ru.iiko.services',
+    api_login TEXT NOT NULL DEFAULT '',
+    organization_id TEXT NOT NULL DEFAULT '',
+    terminal_group_id TEXT NOT NULL DEFAULT '',
+    order_type_id TEXT NOT NULL DEFAULT '',
+    payment_type_id TEXT NOT NULL DEFAULT '',
+    payment_type_kind TEXT NOT NULL DEFAULT 'Card',
+    import_categories INTEGER NOT NULL DEFAULT 1,
+    import_products INTEGER NOT NULL DEFAULT 1,
+    import_images INTEGER NOT NULL DEFAULT 1,
+    auto_sync_enabled INTEGER NOT NULL DEFAULT 0,
+    auto_sync_interval_minutes INTEGER NOT NULL DEFAULT 30,
+    send_orders_to_iiko INTEGER NOT NULL DEFAULT 0,
+    menu_revision INTEGER NOT NULL DEFAULT 0,
+    is_connected INTEGER NOT NULL DEFAULT 0,
+    last_sync_at TEXT,
+    last_sync_status TEXT NOT NULL DEFAULT '',
+    last_sync_error TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     external_id TEXT UNIQUE,
@@ -171,6 +205,7 @@ db.exec(`
     delivery_fee INTEGER NOT NULL DEFAULT 0,
     total INTEGER NOT NULL DEFAULT 0,
     bonus_earned INTEGER NOT NULL DEFAULT 0,
+    bonus_applied INTEGER NOT NULL DEFAULT 0,
     accepted_at TEXT,
     on_way_at TEXT,
     delivered_at TEXT,
@@ -181,6 +216,10 @@ db.exec(`
     poster_transaction_id TEXT NOT NULL DEFAULT '',
     poster_sync_status TEXT NOT NULL DEFAULT '',
     poster_sync_error TEXT NOT NULL DEFAULT '',
+    iiko_order_id TEXT NOT NULL DEFAULT '',
+    iiko_correlation_id TEXT NOT NULL DEFAULT '',
+    iiko_sync_status TEXT NOT NULL DEFAULT '',
+    iiko_sync_error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -252,10 +291,24 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS bonus_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    order_id INTEGER,
+    amount INTEGER NOT NULL,
+    transaction_type TEXT NOT NULL DEFAULT 'earned',
+    description TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_categories_sort ON categories(sort_order, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_products_poster_id ON products(poster_id);
   CREATE INDEX IF NOT EXISTS idx_categories_poster_id ON categories(poster_id);
+  CREATE INDEX IF NOT EXISTS idx_products_iiko_id ON products(iiko_id);
+  CREATE INDEX IF NOT EXISTS idx_categories_iiko_id ON categories(iiko_id);
   CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
@@ -265,9 +318,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer_id ON customer_addresses(customer_id, is_default DESC, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_sessions_customer_id ON customer_sessions(customer_id, is_active, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_otp_phone ON customer_otp_requests(phone, purpose, is_used, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_bonus_transactions_customer ON bonus_transactions(customer_id, created_at DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_bonus_transactions_order_type ON bonus_transactions(order_id, transaction_type);
 `);
 
 ensureColumn("settings", "splash_image_url", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("settings", "delivery_zone_enabled", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("settings", "delivery_center_lat", "REAL NOT NULL DEFAULT 41.3111");
+ensureColumn("settings", "delivery_center_lng", "REAL NOT NULL DEFAULT 69.2797");
+ensureColumn("settings", "delivery_radius_km", "REAL NOT NULL DEFAULT 10");
+ensureColumn("settings", "bonus_enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("banners", "use_target_image", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("settings", "splash_title_ru", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("settings", "splash_title_uz", "TEXT NOT NULL DEFAULT ''");
@@ -300,6 +360,14 @@ ensureColumn("orders", "payment_transaction_id", "INTEGER");
 ensureColumn("orders", "payment_session", "INTEGER");
 ensureColumn("orders", "payment_card_mask", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "bonus_earned", "INTEGER NOT NULL DEFAULT 0");
+const addedBonusAppliedColumn = ensureColumn(
+  "orders",
+  "bonus_applied",
+  "INTEGER NOT NULL DEFAULT 0",
+);
+if (addedBonusAppliedColumn) {
+  db.prepare("UPDATE orders SET bonus_applied = 1 WHERE bonus_earned > 0").run();
+}
 ensureColumn("orders", "accepted_at", "TEXT");
 ensureColumn("orders", "on_way_at", "TEXT");
 ensureColumn("orders", "delivered_at", "TEXT");
@@ -309,6 +377,14 @@ ensureColumn("orders", "poster_incoming_order_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "poster_transaction_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "poster_sync_status", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "poster_sync_error", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("orders", "iiko_order_id", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("orders", "iiko_correlation_id", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("orders", "iiko_sync_status", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("orders", "iiko_sync_error", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("products", "iiko_id", "TEXT");
+ensureColumn("products", "synced_from_iiko", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("categories", "iiko_id", "TEXT");
+ensureColumn("categories", "synced_from_iiko", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("poster_settings", "auto_sync_enabled", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn(
   "poster_settings",
@@ -360,6 +436,19 @@ db.prepare(`
   VALUES (1, '', '', '', '', 1, 1, 1, 1, 0, '', '', 0, '', ?)
   ON CONFLICT(id) DO NOTHING
 `).run(now);
+
+db.prepare(`
+  INSERT INTO iiko_settings (id, updated_at)
+  VALUES (1, ?)
+  ON CONFLICT(id) DO NOTHING
+`).run(now);
+
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_products_iiko_id_upsert
+  ON products(iiko_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_iiko_id_upsert
+  ON categories(iiko_id);
+`);
 
 export function getDb() {
   return db;

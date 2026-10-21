@@ -25,6 +25,7 @@ export async function GET() {
          o.delivery_fee,
          o.total,
          o.bonus_earned,
+         o.bonus_applied,
          o.payment_method,
          o.payment_provider,
          o.payment_status,
@@ -63,6 +64,7 @@ export async function GET() {
     delivery_fee: number;
     total: number;
     bonus_earned: number;
+    bonus_applied: number;
     payment_method: string | null;
     payment_provider: string | null;
     payment_status: string | null;

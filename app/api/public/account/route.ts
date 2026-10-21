@@ -49,43 +49,32 @@ export async function PUT(request: Request) {
 
   const body = await request.json().catch(() => null);
   const fullName = body?.fullName?.toString().trim() ?? "";
-  const phone = normalizePhone(body?.phone);
+  const submittedPhone = body?.phone == null
+    ? session.phone
+    : normalizePhone(body.phone);
 
-  if (!fullName || !phone) {
+  if (!fullName) {
+    return NextResponse.json({ error: "Укажите имя" }, { status: 400 });
+  }
+  if (submittedPhone !== session.phone) {
     return NextResponse.json(
-      { error: "Укажите имя и телефон" },
-      { status: 400 }
+      { error: "Номер телефона нельзя изменить после регистрации" },
+      { status: 409 },
     );
   }
 
   const db = getDb();
-  const exists = db
-    .prepare("SELECT id FROM customers WHERE phone = ? AND id != ?")
-    .get(phone, session.customer_id) as { id: number } | undefined;
-  if (exists) {
-    return NextResponse.json(
-      { error: "Клиент с таким телефоном уже существует" },
-      { status: 409 }
-    );
-  }
-
   const now = nowIso();
   db.transaction(() => {
     db.prepare(
       `UPDATE customers
-       SET full_name = ?, phone = ?, updated_at = ?
+       SET full_name = ?, updated_at = ?
        WHERE id = ?`
-    ).run(fullName, phone, now, session.customer_id);
+    ).run(fullName, now, session.customer_id);
 
-    if (phone !== session.phone) {
-      db.prepare(
-        "UPDATE orders SET customer_name = ?, customer_phone = ?, updated_at = ? WHERE customer_phone = ?"
-      ).run(fullName, phone, now, session.phone);
-    } else {
-      db.prepare(
-        "UPDATE orders SET customer_name = ?, updated_at = ? WHERE customer_phone = ?"
-      ).run(fullName, now, phone);
-    }
+    db.prepare(
+      "UPDATE orders SET customer_name = ?, updated_at = ? WHERE customer_phone = ?"
+    ).run(fullName, now, session.phone);
   })();
 
   return NextResponse.json({

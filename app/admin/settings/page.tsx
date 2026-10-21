@@ -10,9 +10,14 @@ type Settings = {
   phone: string;
   address: string;
   work_hours: string;
+  delivery_zone_enabled: number;
+  delivery_center_lat: number;
+  delivery_center_lng: number;
+  delivery_radius_km: number;
   delivery_fee: number;
   min_order: number;
   currency: string;
+  bonus_enabled: number;
   bonus_percent: number;
   bonus_redeem_amount: number;
   support_phone: string;
@@ -58,15 +63,40 @@ type PosterSettings = {
   order_spot_id: string;
 };
 
+type IikoSettings = {
+  base_url: string;
+  api_login: string;
+  organization_id: string;
+  terminal_group_id: string;
+  order_type_id: string;
+  payment_type_id: string;
+  payment_type_kind: string;
+  import_categories: number;
+  import_products: number;
+  import_images: number;
+  auto_sync_enabled: number;
+  auto_sync_interval_minutes: number;
+  send_orders_to_iiko: number;
+  is_connected: number;
+  last_sync_at: string | null;
+  last_sync_status: string;
+  last_sync_error: string;
+};
+
 export default function SettingsPage() {
   const [form, setForm] = useState<Settings>({
     cafe_name: "",
     phone: "",
     address: "",
     work_hours: "",
+    delivery_zone_enabled: 0,
+    delivery_center_lat: 41.3111,
+    delivery_center_lng: 69.2797,
+    delivery_radius_km: 10,
     delivery_fee: 0,
     min_order: 0,
     currency: "сум",
+    bonus_enabled: 1,
     bonus_percent: 0,
     bonus_redeem_amount: 0,
     support_phone: "",
@@ -110,11 +140,32 @@ export default function SettingsPage() {
     send_orders_to_poster: 0,
     order_spot_id: "",
   });
+  const [iiko, setIiko] = useState<IikoSettings>({
+    base_url: "https://api-ru.iiko.services",
+    api_login: "",
+    organization_id: "",
+    terminal_group_id: "",
+    order_type_id: "",
+    payment_type_id: "",
+    payment_type_kind: "Card",
+    import_categories: 1,
+    import_products: 1,
+    import_images: 1,
+    auto_sync_enabled: 0,
+    auto_sync_interval_minutes: 30,
+    send_orders_to_iiko: 0,
+    is_connected: 0,
+    last_sync_at: null,
+    last_sync_status: "",
+    last_sync_error: "",
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingPlum, setTestingPlum] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [testingIiko, setTestingIiko] = useState(false);
+  const [syncingIiko, setSyncingIiko] = useState(false);
   const [message, setMessage] = useState("");
   const [testingEskiz, setTestingEskiz] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
@@ -127,29 +178,35 @@ export default function SettingsPage() {
 
   const load = async () => {
     setLoading(true);
-    const [settingsRes, posterRes] = await Promise.all([
+    const [settingsRes, posterRes, iikoRes] = await Promise.all([
       fetch("/api/settings"),
       fetch("/api/poster/settings"),
+      fetch("/api/iiko/settings"),
     ]);
     const settingsData = await settingsRes.json();
     const posterData = await posterRes.json();
+    const iikoData = await iikoRes.json();
     if (settingsData?.item) {
       setForm(settingsData.item);
     }
     if (posterData?.item) {
       setPoster(posterData.item);
     }
+    if (iikoData?.item) {
+      setIiko(iikoData.item);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 
   const save = async () => {
     setSaving(true);
     setMessage("");
-    await Promise.all([
+    const responses = await Promise.all([
       fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -158,9 +215,14 @@ export default function SettingsPage() {
           phone: form.phone,
           address: form.address,
           workHours: form.work_hours,
+          deliveryZoneEnabled: form.delivery_zone_enabled === 1,
+          deliveryCenterLat: Number(form.delivery_center_lat),
+          deliveryCenterLng: Number(form.delivery_center_lng),
+          deliveryRadiusKm: Number(form.delivery_radius_km),
           deliveryFee: Number(form.delivery_fee),
           minOrder: Number(form.min_order),
           currency: form.currency,
+          bonusEnabled: form.bonus_enabled === 1,
           bonusPercent: Number(form.bonus_percent),
           bonusRedeemAmount: Number(form.bonus_redeem_amount),
           supportPhone: form.support_phone,
@@ -205,7 +267,33 @@ export default function SettingsPage() {
           orderSpotId: poster.order_spot_id,
         }),
       }),
+      fetch("/api/iiko/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: iiko.base_url,
+          apiLogin: iiko.api_login,
+          organizationId: iiko.organization_id,
+          terminalGroupId: iiko.terminal_group_id,
+          orderTypeId: iiko.order_type_id,
+          paymentTypeId: iiko.payment_type_id,
+          paymentTypeKind: iiko.payment_type_kind,
+          importCategories: iiko.import_categories === 1,
+          importProducts: iiko.import_products === 1,
+          importImages: iiko.import_images === 1,
+          autoSyncEnabled: iiko.auto_sync_enabled === 1,
+          autoSyncIntervalMinutes: iiko.auto_sync_interval_minutes,
+          sendOrdersToIiko: iiko.send_orders_to_iiko === 1,
+        }),
+      }),
     ]);
+    const failedResponse = responses.find((response) => !response.ok);
+    if (failedResponse) {
+      const error = await failedResponse.json().catch(() => null);
+      setSaving(false);
+      setMessage(error?.error ?? "Не удалось сохранить настройки");
+      return;
+    }
     setSaving(false);
     setMessage("Сохранено");
     load();
@@ -231,6 +319,30 @@ export default function SettingsPage() {
       response.ok
         ? `Синхронизировано: ${data?.importedCategories ?? 0} категорий, ${data?.importedProducts ?? 0} товаров`
         : data?.error ?? "Ошибка синхронизации",
+    );
+    load();
+  };
+
+  const testIikoConnection = async () => {
+    setTestingIiko(true);
+    setMessage("");
+    const response = await fetch("/api/iiko/settings", { method: "POST" });
+    const data = await response.json().catch(() => null);
+    setTestingIiko(false);
+    setMessage(response.ok ? "Подключение к iiko успешно" : data?.error ?? "Ошибка подключения к iiko");
+    load();
+  };
+
+  const runIikoSync = async () => {
+    setSyncingIiko(true);
+    setMessage("");
+    const response = await fetch("/api/iiko/sync", { method: "POST" });
+    const data = await response.json().catch(() => null);
+    setSyncingIiko(false);
+    setMessage(
+      response.ok
+        ? `iiko: ${data?.importedCategories ?? 0} категорий, ${data?.importedProducts ?? 0} товаров`
+        : data?.error ?? "Ошибка синхронизации iiko",
     );
     load();
   };
@@ -293,7 +405,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <SectionTitle
         title="Настройки"
-        subtitle="Общие настройки приложения, public API и интеграция с Poster."
+        subtitle="Приложение, оплаты и системы учета."
       />
 
       <div className="flex flex-wrap gap-3">
@@ -324,6 +436,25 @@ export default function SettingsPage() {
           <Field label="Часы работы">
             <input value={form.work_hours} onChange={(e) => setForm({ ...form, work_hours: e.target.value })} className={inputClass} />
           </Field>
+          <p className="text-xs text-[var(--muted)]">
+            Формат для проверки заказов: 09:00-23:00. Ночной график: 10:00-02:00.
+          </p>
+          <SwitchRow
+            label="Проверять зону доставки"
+            checked={form.delivery_zone_enabled === 1}
+            onChange={(checked) => setForm({ ...form, delivery_zone_enabled: checked ? 1 : 0 })}
+          />
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Центр: широта">
+              <input type="number" step="any" value={form.delivery_center_lat} onChange={(e) => setForm({ ...form, delivery_center_lat: Number(e.target.value) })} className={inputClass} />
+            </Field>
+            <Field label="Центр: долгота">
+              <input type="number" step="any" value={form.delivery_center_lng} onChange={(e) => setForm({ ...form, delivery_center_lng: Number(e.target.value) })} className={inputClass} />
+            </Field>
+            <Field label="Радиус доставки, км">
+              <input type="number" min={0.1} step={0.1} value={form.delivery_radius_km} onChange={(e) => setForm({ ...form, delivery_radius_km: Number(e.target.value) })} className={inputClass} />
+            </Field>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Доставка">
               <input type="number" value={form.delivery_fee} onChange={(e) => setForm({ ...form, delivery_fee: Number(e.target.value) })} className={inputClass} />
@@ -336,6 +467,32 @@ export default function SettingsPage() {
             <Field label="Валюта">
               <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className={inputClass} />
             </Field>
+            <Field label="Бонус за доставленный заказ, %">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={form.bonus_percent}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    bonus_percent: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                  })
+                }
+                className={inputClass}
+              />
+            </Field>
+          </div>
+          <SwitchRow
+            label="Начислять бонусы в приложении"
+            checked={form.bonus_enabled === 1}
+            onChange={(checked) => setForm({ ...form, bonus_enabled: checked ? 1 : 0 })}
+          />
+          <p className="text-xs text-[var(--muted)]">
+            Начисление происходит только после завершения заказа кассиром. Бонусы Poster и iiko работают отдельно.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
             <Field label="API key для мобилки">
               <input value={form.mobile_api_key} onChange={(e) => setForm({ ...form, mobile_api_key: e.target.value })} className={inputClass} />
             </Field>
@@ -600,6 +757,55 @@ export default function SettingsPage() {
             </PrimaryButton>
             <PrimaryButton onClick={runSync} disabled={syncing}>
               {syncing ? "Синхронизация..." : "Синхронизировать"}
+            </PrimaryButton>
+          </div>
+        </Card>
+
+        <Card className="space-y-4">
+          <SectionTitle title="iiko" subtitle="Меню и заказы через iikoCloud API." />
+          <Field label="API URL">
+            <input value={iiko.base_url} onChange={(e) => setIiko({ ...iiko, base_url: e.target.value })} className={inputClass} />
+          </Field>
+          <Field label="API Login">
+            <input type="password" value={iiko.api_login} onChange={(e) => setIiko({ ...iiko, api_login: e.target.value })} className={inputClass} />
+          </Field>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Organization ID">
+              <input value={iiko.organization_id} onChange={(e) => setIiko({ ...iiko, organization_id: e.target.value })} className={inputClass} />
+            </Field>
+            <Field label="Terminal Group ID">
+              <input value={iiko.terminal_group_id} onChange={(e) => setIiko({ ...iiko, terminal_group_id: e.target.value })} className={inputClass} />
+            </Field>
+            <Field label="Order Type ID">
+              <input value={iiko.order_type_id} onChange={(e) => setIiko({ ...iiko, order_type_id: e.target.value })} className={inputClass} />
+            </Field>
+            <Field label="Payment Type ID">
+              <input value={iiko.payment_type_id} onChange={(e) => setIiko({ ...iiko, payment_type_id: e.target.value })} className={inputClass} />
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <SwitchRow label="Категории" checked={iiko.import_categories === 1} onChange={(checked) => setIiko({ ...iiko, import_categories: checked ? 1 : 0 })} />
+            <SwitchRow label="Товары" checked={iiko.import_products === 1} onChange={(checked) => setIiko({ ...iiko, import_products: checked ? 1 : 0 })} />
+            <SwitchRow label="Картинки" checked={iiko.import_images === 1} onChange={(checked) => setIiko({ ...iiko, import_images: checked ? 1 : 0 })} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <SwitchRow label="Авто-sync" checked={iiko.auto_sync_enabled === 1} onChange={(checked) => setIiko({ ...iiko, auto_sync_enabled: checked ? 1 : 0 })} />
+            <Field label="Интервал, мин">
+              <input type="number" min={1} value={iiko.auto_sync_interval_minutes} onChange={(e) => setIiko({ ...iiko, auto_sync_interval_minutes: Number(e.target.value) || 30 })} className={inputClass} />
+            </Field>
+          </div>
+          <SwitchRow label="Отправлять заказы в iiko" checked={iiko.send_orders_to_iiko === 1} onChange={(checked) => setIiko({ ...iiko, send_orders_to_iiko: checked ? 1 : 0 })} />
+          <div className="rounded-2xl bg-white p-4 text-sm">
+            <p><b>Статус:</b> {iiko.is_connected ? "Подключено" : "Не подключено"}</p>
+            <p><b>Последний sync:</b> {iiko.last_sync_at || "—"}</p>
+            <p><b>Результат:</b> {iiko.last_sync_error || iiko.last_sync_status || "—"}</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <PrimaryButton onClick={testIikoConnection} disabled={testingIiko}>
+              {testingIiko ? "Проверка..." : "Проверить iiko"}
+            </PrimaryButton>
+            <PrimaryButton onClick={runIikoSync} disabled={syncingIiko}>
+              {syncingIiko ? "Синхронизация..." : "Синхронизировать iiko"}
             </PrimaryButton>
           </div>
         </Card>

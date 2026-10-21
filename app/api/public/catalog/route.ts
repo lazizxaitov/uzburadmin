@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/lib/db";
 import { maybeAutoSyncPoster } from "@/lib/poster-sync";
+import { maybeAutoSyncIiko } from "@/lib/iiko-sync";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
 import { resolvePublicUrl } from "@/lib/public-url";
 
@@ -16,7 +17,7 @@ export async function GET() {
   if (rateError) {
     return NextResponse.json({ error: rateError.message }, { status: rateError.status });
   }
-  await maybeAutoSyncPoster();
+  await Promise.all([maybeAutoSyncPoster(), maybeAutoSyncIiko()]);
 
   const db = getDb();
   const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get() as

@@ -86,6 +86,22 @@ export function serializeCustomerAccount(customerId: number) {
       }>)
     : [];
 
+  const bonusTransactions = db
+    .prepare(
+      `SELECT id, order_id, amount, transaction_type, description, created_at
+       FROM bonus_transactions
+       WHERE customer_id = ?
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all(customerId) as Array<{
+    id: number;
+    order_id: number | null;
+    amount: number;
+    transaction_type: string;
+    description: string;
+    created_at: string;
+  }>;
+
   const itemsByOrder = new Map<number, typeof orderItems>();
   for (const item of orderItems) {
     const list = itemsByOrder.get(item.order_id) ?? [];
@@ -114,6 +130,14 @@ export function serializeCustomerAccount(customerId: number) {
       latitude: item.latitude,
       longitude: item.longitude,
       isDefault: Number(item.is_default ?? 0) === 1,
+    })),
+    bonusTransactions: bonusTransactions.map((item) => ({
+      id: item.id,
+      orderId: item.order_id,
+      amount: Number(item.amount ?? 0),
+      type: item.transaction_type,
+      description: item.description,
+      createdAt: item.created_at,
     })),
     orders: orders.map((order) => ({
       id: order.external_id?.trim() ? order.external_id : `ORD-${order.id}`,

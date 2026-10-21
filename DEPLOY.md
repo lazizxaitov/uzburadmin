@@ -111,6 +111,17 @@ cp -R public .next/standalone/public
 pm2 restart uzburadmin
 ```
 
+## iikoCloud
+
+1. Create an API login in iikoWeb and copy its API key.
+2. Open `Настройки` → `iiko` in the admin panel.
+3. Enter the API Login and save settings.
+4. Click `Проверить iiko`. The organization, terminal group, delivery order type, and payment type IDs are filled automatically.
+5. Click `Синхронизировать iiko` to import the menu.
+6. Enable `Отправлять заказы в iiko` only after the test order is accepted by the selected terminal group.
+
+Keep Poster order export disabled if orders should be sent only to iiko.
+
 ## Notes
 
 - Current build passes locally
