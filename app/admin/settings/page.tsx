@@ -427,7 +427,7 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="flex flex-col gap-6">
         <Card className="space-y-4">
           <SectionTitle title="Приложение" subtitle="Публичные данные для мобильного клиента." />
           <Field label="Название">
