@@ -26,9 +26,14 @@ export async function GET() {
   const banners = db
     .prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC")
     .all() as Array<Record<string, unknown>>;
-  const categories = db.prepare(
-    "SELECT * FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC"
-  ).all() as Array<Record<string, unknown>>;
+  const categories = db.prepare(`
+    SELECT c.*, COUNT(p.id) AS product_count
+    FROM categories c
+    LEFT JOIN products p ON p.category_id = c.id AND p.is_active = 1
+    WHERE c.is_active = 1
+    GROUP BY c.id
+    ORDER BY product_count DESC, c.sort_order ASC, c.created_at DESC
+  `).all() as Array<Record<string, unknown>>;
   const products = db.prepare(
     `
       SELECT p.*, c.name_ru as category_name_ru, c.name_uz as category_name_uz

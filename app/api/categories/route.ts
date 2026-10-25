@@ -14,7 +14,13 @@ export async function GET() {
 
   const db = getDb();
   const categories = db
-    .prepare("SELECT * FROM categories ORDER BY sort_order ASC, created_at DESC")
+    .prepare(`
+      SELECT c.*, COUNT(CASE WHEN p.is_active = 1 THEN 1 END) AS product_count
+      FROM categories c
+      LEFT JOIN products p ON p.category_id = c.id
+      GROUP BY c.id
+      ORDER BY product_count DESC, c.sort_order ASC, c.created_at DESC
+    `)
     .all();
 
   return NextResponse.json({ items: categories });
