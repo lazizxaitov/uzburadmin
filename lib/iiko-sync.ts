@@ -1,7 +1,10 @@
 import "server-only";
 
 import { getDb, nowIso } from "@/lib/db";
-import { fetchIikoNomenclature } from "@/lib/iiko";
+import {
+  fetchIikoExternalMenu,
+  fetchIikoExternalMenus,
+} from "@/lib/iiko";
 import { slugify } from "@/lib/slug";
 
 type IikoSettingsRow = {
@@ -22,36 +25,31 @@ type IikoSettingsRow = {
 type IikoGroup = {
   id?: string;
   name?: string;
-  description?: string;
-  imageLinks?: string[];
-  order?: number;
-  isIncludedInMenu?: boolean;
-  isGroupModifier?: boolean;
-  isDeleted?: boolean;
+  items?: IikoMenuItem[];
 };
 
 type IikoSizePrice = {
-  sizeId?: string;
-  price?: {
-    currentPrice?: number;
-    isIncludedInMenu?: boolean;
-  };
+  sizeName?: string;
+  isDefault?: boolean;
+  price?: number;
+  buttonImageUrl?: string;
+  image?: string;
+  isHidden?: boolean;
 };
 
-type IikoProduct = {
-  id?: string;
+type IikoMenuItem = {
+  productId?: string;
+  menuItemId?: string;
   name?: string;
-  fullNameEnglish?: string;
   description?: string;
-  parentGroup?: string;
-  groupId?: string;
-  type?: string;
-  imageLinks?: string[];
   sizePrices?: IikoSizePrice[];
-  isDeleted?: boolean;
+  isHidden?: boolean;
 };
 
-type IikoSize = { id?: string; name?: string; isDefault?: boolean };
+type IikoProductMetadata = {
+  id?: string;
+  orderItemType?: string;
+};
 
 let syncInFlight: Promise<IikoSyncResult> | null = null;
 
@@ -102,15 +100,35 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
     let importedProducts = 0;
 
     try {
-      const result = await fetchIikoNomenclature(
+      const menuList = await fetchIikoExternalMenus(settings);
+      const externalMenu = Array.isArray(menuList.externalMenus)
+        ? menuList.externalMenus[0]
+        : undefined;
+      if (!externalMenu?.id) {
+        throw new Error("В iiko не найдено внешнее меню");
+      }
+
+      const result = await fetchIikoExternalMenu(
         settings,
         settings.organization_id,
+        externalMenu.id,
+      );
+      const groups = Array.isArray(result.itemsGroups)
+        ? result.itemsGroups as IikoGroup[]
+        : [];
+      const productMetadata = Array.isArray(result.products)
+        ? result.products as IikoProductMetadata[]
+        : [];
+      const metadataById = new Map(
+        productMetadata.map((item) => [text(item.id), item]),
+      );
+      const menuItemCount = groups.reduce(
+        (total, group) => total + (Array.isArray(group.items) ? group.items.length : 0),
         0,
       );
-      const groups = Array.isArray(result.groups) ? result.groups as IikoGroup[] : [];
-      const products = Array.isArray(result.products) ? result.products as IikoProduct[] : [];
-      const sizes = Array.isArray(result.sizes) ? result.sizes as IikoSize[] : [];
-      const sizeById = new Map(sizes.map((item) => [text(item.id), item]));
+      if (!groups.length || !menuItemCount) {
+        throw new Error(`Внешнее меню «${externalMenu.name || externalMenu.id}» пустое`);
+      }
 
       if (settings.import_categories === 1) {
         const importedIds: string[] = [];
@@ -129,19 +147,19 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
             updated_at = excluded.updated_at
         `);
 
-        for (const group of groups) {
+        for (const [index, group] of groups.entries()) {
           const id = text(group.id);
           const name = text(group.name);
-          if (!id || !name || group.isGroupModifier || group.isDeleted) continue;
+          if (!id || !name) continue;
           importedIds.push(id);
           upsert.run(
             id,
             name,
             name,
             `${slugify(name)}-${id.slice(0, 8)}`,
-            settings.import_images === 1 ? text(group.imageLinks?.[0]) || null : null,
-            Number(group.order ?? 0),
-            group.isIncludedInMenu === false ? 0 : 1,
+            null,
+            index,
+            1,
             now,
             now,
           );
@@ -177,62 +195,77 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
         const clearPortions = db.prepare("DELETE FROM portion_options WHERE product_id = ?");
         const insertPortion = db.prepare("INSERT INTO portion_options (product_id, label_ru, label_uz, price) VALUES (?, ?, ?, ?)");
 
-        for (const product of products) {
-          const id = text(product.id);
-          const name = text(product.name);
-          if (!id || !name || product.isDeleted || product.type === "modifier") continue;
-
-          const availablePrices = (product.sizePrices ?? []).filter(
-            (item) => item.price?.isIncludedInMenu !== false,
-          );
-          if (!availablePrices.length) continue;
-
-          const parentId = text(product.parentGroup ?? product.groupId);
-          const category = parentId
-            ? findCategory.get(parentId) as { id: number } | undefined
+        const seenProducts = new Set<string>();
+        for (const group of groups) {
+          const categoryIikoId = text(group.id);
+          const category = categoryIikoId
+            ? findCategory.get(categoryIikoId) as { id: number } | undefined
             : undefined;
-          const defaultPrice = availablePrices.find(
-            (item) => sizeById.get(text(item.sizeId))?.isDefault,
-          ) ?? availablePrices[0];
-          const price = Math.round(Number(defaultPrice.price?.currentPrice ?? 0));
-          const description = text(product.description);
 
-          importedIds.push(id);
-          upsert.run(
-            id,
-            category?.id ?? null,
-            name,
-            text(product.fullNameEnglish) || name,
-            description,
-            description,
-            price,
-            availablePrices.length > 1 ? "portion" : "quantity",
-            1,
-            now,
-            now,
-          );
+          for (const product of group.items ?? []) {
+            const id = text(product.productId);
+            const name = text(product.name);
+            const metadata = metadataById.get(id);
+            if (
+              !id ||
+              !name ||
+              seenProducts.has(id) ||
+              text(metadata?.orderItemType).toLowerCase() === "modifier"
+            ) continue;
 
-          const row = findProduct.get(id) as { id: number };
-          if (settings.import_images === 1) {
-            clearImages.run(row.id);
-            (product.imageLinks ?? []).filter(Boolean).forEach((url, index) => {
-              insertImage.run(row.id, url, index);
-            });
+            const availablePrices = (product.sizePrices ?? []).filter(
+              (item) => item.isHidden !== true && Number.isFinite(Number(item.price)),
+            );
+            if (!availablePrices.length) continue;
+
+            seenProducts.add(id);
+            const defaultPrice = availablePrices.find((item) => item.isDefault)
+              ?? availablePrices[0];
+            const price = Math.round(Number(defaultPrice.price ?? 0));
+            const description = text(product.description);
+
+            importedIds.push(id);
+            upsert.run(
+              id,
+              category?.id ?? null,
+              name,
+              name,
+              description,
+              description,
+              price,
+              availablePrices.length > 1 ? "portion" : "quantity",
+              product.isHidden === true ? 0 : 1,
+              now,
+              now,
+            );
+
+            const row = findProduct.get(id) as { id: number };
+            if (settings.import_images === 1) {
+              clearImages.run(row.id);
+              const imageUrls = [...new Set(
+                availablePrices
+                  .flatMap((item) => [text(item.buttonImageUrl), text(item.image)])
+                  .filter(Boolean),
+              )];
+              imageUrls.forEach((url, imageIndex) => {
+                insertImage.run(row.id, url, imageIndex);
+              });
+            }
+
+            clearPortions.run(row.id);
+            if (availablePrices.length > 1) {
+              availablePrices.forEach((item, portionIndex) => {
+                const label = text(item.sizeName) || `Размер ${portionIndex + 1}`;
+                insertPortion.run(
+                  row.id,
+                  label,
+                  label,
+                  Math.round(Number(item.price ?? 0)),
+                );
+              });
+            }
+            importedProducts += 1;
           }
-
-          clearPortions.run(row.id);
-          if (availablePrices.length > 1) {
-            availablePrices.forEach((item) => {
-              const label = text(sizeById.get(text(item.sizeId))?.name) || "Размер";
-              insertPortion.run(
-                row.id,
-                label,
-                label,
-                Math.round(Number(item.price?.currentPrice ?? 0)),
-              );
-            });
-          }
-          importedProducts += 1;
         }
         deactivateMissing("products", importedIds, now);
       }

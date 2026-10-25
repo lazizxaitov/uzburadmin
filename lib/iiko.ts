@@ -117,6 +117,28 @@ export async function fetchIikoNomenclature(
   });
 }
 
+export type IikoExternalMenu = { id: string; name: string };
+
+export async function fetchIikoExternalMenus(settings: IikoSettings) {
+  return authorizedPost<{ externalMenus: IikoExternalMenu[] }>(
+    settings,
+    "/api/2/menu",
+    {},
+  );
+}
+
+export async function fetchIikoExternalMenu(
+  settings: IikoSettings,
+  organizationId: string,
+  externalMenuId: string,
+) {
+  return authorizedPost<Record<string, unknown>>(
+    settings,
+    "/api/menu/v3/by_id",
+    { organizationId, externalMenuId },
+  );
+}
+
 export async function fetchIikoReferences(
   settings: IikoSettings,
   organizationId: string,
