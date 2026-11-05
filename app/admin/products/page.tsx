@@ -25,6 +25,7 @@ type PortionOption = {
 
 type Product = {
   id: number;
+  created_at?: string;
   title_ru: string;
   title_uz: string;
   price: number;
@@ -40,6 +41,7 @@ type Product = {
   pricing_mode: "quantity" | "portion";
   stock: number;
   is_active: number;
+  is_popular: number;
   images: string[];
   portionOptions: Array<{
     label_ru: string;
@@ -77,6 +79,7 @@ export default function ProductsPage() {
     pricingMode: "quantity" as "quantity" | "portion",
     stock: 0,
     isActive: true,
+    isPopular: false,
     images: [] as string[],
     portionOptions: [] as PortionOption[],
   });
@@ -113,6 +116,7 @@ export default function ProductsPage() {
       pricingMode: "quantity",
       stock: 0,
       isActive: true,
+      isPopular: false,
       images: [],
       portionOptions: [],
     });
@@ -135,6 +139,7 @@ export default function ProductsPage() {
       pricingMode: item.pricing_mode,
       stock: item.stock,
       isActive: item.is_active === 1,
+      isPopular: item.is_popular === 1,
       images: item.images ?? [],
       portionOptions:
         item.portionOptions?.map((option) => ({
@@ -213,6 +218,7 @@ export default function ProductsPage() {
       pricingMode: form.pricingMode,
       stock: Number(form.stock),
       isActive: form.isActive,
+      isPopular: form.isPopular,
       images: form.images,
       portionOptions: form.portionOptions,
     };
@@ -245,6 +251,34 @@ export default function ProductsPage() {
   const remove = async (id: number) => {
     await fetch(`/api/products/${id}`, { method: "DELETE" });
     load();
+  };
+
+  const togglePopular = async (item: Product) => {
+    const isPopular = item.is_popular !== 1;
+    const response = await fetch(`/api/products/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isPopular }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      setError(data?.error ?? "Не удалось изменить популярность товара");
+      return;
+    }
+    setItems((current) =>
+      current
+        .map((product) =>
+          product.id === item.id
+            ? { ...product, is_popular: isPopular ? 1 : 0 }
+            : product
+        )
+        .sort(
+          (a, b) =>
+            b.is_popular - a.is_popular ||
+            b.created_at?.localeCompare?.(a.created_at ?? "") ||
+            b.id - a.id
+        )
+    );
   };
 
   const selectedCategory = categories.find(
@@ -438,12 +472,18 @@ export default function ProductsPage() {
                     <span>Категория: {item.category_name_ru ?? "—"}</span>
                     <span>Остаток: {item.stock}</span>
                     <span>{item.is_active ? "Активен" : "Скрыт"}</span>
+                    {item.is_popular ? (
+                      <span className="font-bold text-amber-600">★ Популярный</span>
+                    ) : null}
                   </div>
                   <p className="mt-2 text-sm font-semibold text-[var(--ink)]">
                     {item.price.toLocaleString("ru-RU")} сум
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <GhostButton onClick={() => togglePopular(item)}>
+                    {item.is_popular ? "★ Убрать" : "☆ В популярные"}
+                  </GhostButton>
                   <GhostButton onClick={() => startEdit(item)}>Ред.</GhostButton>
                   <GhostButton onClick={() => remove(item.id)}>Удал.</GhostButton>
                 </div>
@@ -690,6 +730,19 @@ export default function ProductsPage() {
               }
             />
             Активен
+          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <input
+              type="checkbox"
+              checked={form.isPopular}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  isPopular: event.target.checked,
+                }))
+              }
+            />
+            Популярный товар
           </label>
         </div>
 

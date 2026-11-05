@@ -62,6 +62,7 @@ db.exec(`
     pricing_mode TEXT NOT NULL DEFAULT 'quantity',
     stock INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
+    is_popular INTEGER NOT NULL DEFAULT 0,
     synced_from_poster INTEGER NOT NULL DEFAULT 0,
     synced_from_iiko INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
@@ -385,6 +386,11 @@ ensureColumn("orders", "iiko_sync_status", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "iiko_sync_error", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("products", "iiko_id", "TEXT");
 ensureColumn("products", "synced_from_iiko", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("products", "is_popular", "INTEGER NOT NULL DEFAULT 0");
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_popular
+  ON products(is_popular DESC, created_at DESC);
+`);
 ensureColumn("categories", "iiko_id", "TEXT");
 ensureColumn("categories", "synced_from_iiko", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("iiko_settings", "app_id", "TEXT NOT NULL DEFAULT ''");

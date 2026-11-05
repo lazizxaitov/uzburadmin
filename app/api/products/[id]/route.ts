@@ -82,6 +82,7 @@ export async function PUT(
   const pricingMode = body?.pricingMode === "portion" ? "portion" : "quantity";
   const stock = Number(body?.stock ?? 0);
   const isActive = body?.isActive === false ? 0 : 1;
+  const isPopular = body?.isPopular === true ? 1 : 0;
   const images = Array.isArray(body?.images) ? body.images : [];
   const portionOptions: Array<{
     labelRu?: string;
@@ -118,7 +119,7 @@ export async function PUT(
       `UPDATE products
        SET category_id = ?, title_ru = ?, title_uz = ?, description_title_ru = ?, description_title_uz = ?,
            description_text_ru = ?, description_text_uz = ?, price = ?, price_text_ru = ?, price_text_uz = ?,
-           pricing_mode = ?, stock = ?, is_active = ?, updated_at = ?
+           pricing_mode = ?, stock = ?, is_active = ?, is_popular = ?, updated_at = ?
        WHERE id = ?`
     ).run(
       categoryId,
@@ -134,6 +135,7 @@ export async function PUT(
       pricingMode,
       stock,
       isActive,
+      isPopular,
       now,
       id
     );
@@ -164,6 +166,38 @@ export async function PUT(
 
   update();
   return NextResponse.json({ ok: true });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const id = Number((await params).id);
+  if (!id) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => null);
+  if (typeof body?.isPopular !== "boolean") {
+    return NextResponse.json({ error: "Invalid isPopular" }, { status: 400 });
+  }
+
+  const result = getDb().prepare(`
+    UPDATE products
+    SET is_popular = ?, updated_at = ?
+    WHERE id = ?
+  `).run(body.isPopular ? 1 : 0, nowIso(), id);
+
+  if (result.changes === 0) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ ok: true, isPopular: body.isPopular });
 }
 
 export async function DELETE(

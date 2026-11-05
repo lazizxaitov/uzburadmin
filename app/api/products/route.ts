@@ -17,7 +17,7 @@ export async function GET() {
       `SELECT p.*, c.name_ru as category_name_ru, c.name_uz as category_name_uz
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
-       ORDER BY p.created_at DESC`
+       ORDER BY p.is_popular DESC, p.created_at DESC`
     )
     .all();
 
@@ -86,6 +86,7 @@ export async function POST(request: Request) {
   const pricingMode = body?.pricingMode === "portion" ? "portion" : "quantity";
   const stock = Number(body?.stock ?? 0);
   const isActive = body?.isActive === false ? 0 : 1;
+  const isPopular = body?.isPopular === true ? 1 : 0;
   const images = Array.isArray(body?.images) ? body.images : [];
   const portionOptions: Array<{
     labelRu?: string;
@@ -122,8 +123,8 @@ export async function POST(request: Request) {
       .prepare(
         `INSERT INTO products
          (category_id, title_ru, title_uz, description_title_ru, description_title_uz, description_text_ru, description_text_uz,
-          price, price_text_ru, price_text_uz, pricing_mode, stock, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          price, price_text_ru, price_text_uz, pricing_mode, stock, is_active, is_popular, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         categoryId,
@@ -139,6 +140,7 @@ export async function POST(request: Request) {
         pricingMode,
         stock,
         isActive,
+        isPopular,
         now,
         now
       );

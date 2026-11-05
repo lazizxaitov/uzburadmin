@@ -24,7 +24,7 @@ export async function GET() {
       `SELECT p.* FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
        WHERE p.is_active = 1 AND (p.category_id IS NULL OR c.is_active = 1)
-       ORDER BY p.created_at DESC`
+       ORDER BY p.is_popular DESC, p.created_at DESC`
     )
     .all();
 
