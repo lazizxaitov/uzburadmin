@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { maybeAutoSyncPoster } from "@/lib/poster-sync";
 import { maybeAutoSyncIiko } from "@/lib/iiko-sync";
+import { loadModifierGroups } from "@/lib/product-modifiers";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
 import { resolvePublicUrl } from "@/lib/public-url";
 
@@ -76,10 +77,28 @@ export async function GET() {
     portionsByProduct.set(row.product_id, list);
   }
 
+  const modifiersByProduct = loadModifierGroups(undefined, { onlyActive: true });
+
   const enrichedProducts = products.map((item) => ({
     ...item,
     images: imagesByProduct.get(Number(item.id)) ?? [],
     portionOptions: portionsByProduct.get(Number(item.id)) ?? [],
+    modifierGroups: (modifiersByProduct.get(Number(item.id)) ?? []).map((group) => ({
+      id: group.id,
+      name_ru: group.name_ru,
+      name_uz: group.name_uz,
+      min_qty: group.min_qty,
+      max_qty: group.max_qty,
+      free_qty: group.free_qty,
+      options: group.options.map((option) => ({
+        id: option.id,
+        name_ru: option.name_ru,
+        name_uz: option.name_uz,
+        price: option.price,
+        max_qty: option.max_qty,
+        default_qty: option.default_qty,
+      })),
+    })),
   }));
 
   const resolvedSettings = settings

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getDb, nowIso } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import {
+  loadModifierGroups,
+  parseModifierGroupsInput,
+  saveModifierGroups,
+  savePortionOptions,
+} from "@/lib/product-modifiers";
 
 export const runtime = "nodejs";
 
@@ -42,7 +48,7 @@ export async function GET(
 
   const portionOptions = db
     .prepare(
-      "SELECT id, label_ru, label_uz, price FROM portion_options WHERE product_id = ?"
+      "SELECT id, label_ru, label_uz, price FROM portion_options WHERE product_id = ? ORDER BY id"
     )
     .all(id) as Array<{
     id: number;
@@ -51,7 +57,9 @@ export async function GET(
     price: number;
   }>;
 
-  return NextResponse.json({ ...product, images, portionOptions });
+  const modifierGroups = loadModifierGroups([id]).get(id) ?? [];
+
+  return NextResponse.json({ ...product, images, portionOptions, modifierGroups });
 }
 
 export async function PUT(
@@ -84,11 +92,8 @@ export async function PUT(
   const isActive = body?.isActive === false ? 0 : 1;
   const isPopular = body?.isPopular === true ? 1 : 0;
   const images = Array.isArray(body?.images) ? body.images : [];
-  const portionOptions: Array<{
-    labelRu?: string;
-    labelUz?: string;
-    price?: number;
-  }> = Array.isArray(body?.portionOptions) ? body.portionOptions : [];
+  const portionOptions: unknown[] = Array.isArray(body?.portionOptions) ? body.portionOptions : [];
+  const modifierGroups = parseModifierGroupsInput(body?.modifierGroups);
 
   if (!titleRu || !titleUz) {
     return NextResponse.json({ error: "Missing title" }, { status: 400 });
@@ -150,18 +155,8 @@ export async function PUT(
       }
     });
 
-    db.prepare("DELETE FROM portion_options WHERE product_id = ?").run(id);
-    const insertPortion = db.prepare(
-      "INSERT INTO portion_options (product_id, label_ru, label_uz, price) VALUES (?, ?, ?, ?)"
-    );
-    portionOptions.forEach((option) => {
-      const labelRu = option?.labelRu?.toString()?.trim();
-      const labelUz = option?.labelUz?.toString()?.trim();
-      const optPrice = Number(option?.price ?? 0);
-      if (labelRu && labelUz) {
-        insertPortion.run(id, labelRu, labelUz, optPrice);
-      }
-    });
+    savePortionOptions(id, portionOptions);
+    saveModifierGroups(id, modifierGroups);
   });
 
   update();

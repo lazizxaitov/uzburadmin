@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { getDb, nowIso } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import {
+  loadModifierGroups,
+  parseModifierGroupsInput,
+  saveModifierGroups,
+} from "@/lib/product-modifiers";
 
 export const runtime = "nodejs";
 
@@ -24,7 +29,8 @@ export async function GET() {
   const imageRows = db
     .prepare("SELECT * FROM product_images ORDER BY sort_order ASC")
     .all();
-  const portionRows = db.prepare("SELECT * FROM portion_options").all();
+  const portionRows = db.prepare("SELECT * FROM portion_options ORDER BY id").all();
+  const modifiersByProduct = loadModifierGroups();
 
   const imagesByProduct = new Map<number, string[]>();
   for (const row of imageRows as Array<{ product_id: number; url: string }>) {
@@ -60,6 +66,7 @@ export async function GET() {
       ...item,
       images: imagesByProduct.get(id) ?? [],
       portionOptions: portionsByProduct.get(id) ?? [],
+      modifierGroups: modifiersByProduct.get(id) ?? [],
     };
   });
 
@@ -93,6 +100,7 @@ export async function POST(request: Request) {
     labelUz?: string;
     price?: number;
   }> = Array.isArray(body?.portionOptions) ? body.portionOptions : [];
+  const modifierGroups = parseModifierGroupsInput(body?.modifierGroups);
 
   if (!titleRu || !titleUz) {
     return NextResponse.json({ error: "Missing title" }, { status: 400 });
@@ -167,6 +175,8 @@ export async function POST(request: Request) {
         insertPortion.run(productId, labelRu, labelUz, optPrice);
       }
     });
+
+    saveModifierGroups(productId, modifierGroups);
 
     return productId;
   });

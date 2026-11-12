@@ -81,12 +81,26 @@ export async function sendOrderToIiko(prepared: PreparedOrder): Promise<IikoOrde
         : undefined,
       comment: `Uzbur ${prepared.externalId}`,
       customer: { type: "one-time", name: prepared.customerName },
-      items: prepared.normalizedItems.map((item) => ({
-        type: "Product",
-        productId: iikoIdByProductId.get(item.productId),
-        amount: item.quantity,
-        price: item.price,
-      })),
+      items: prepared.normalizedItems.map((item) => {
+        const modifiers = (item.options?.modifiers ?? [])
+          .filter((modifier) => modifier.iikoId)
+          .map((modifier) => ({
+            productId: modifier.iikoId,
+            amount: modifier.quantity,
+            price: modifier.price,
+            ...(modifier.iikoGroupId ? { productGroupId: modifier.iikoGroupId } : {}),
+          }));
+        const sizeId = item.options?.portion?.iikoSizeId;
+        return {
+          type: "Product",
+          productId: iikoIdByProductId.get(item.productId),
+          amount: item.quantity,
+          // В iiko цена позиции — без модификаторов, они передаются отдельно.
+          price: modifiers.length ? item.options?.basePrice ?? item.price : item.price,
+          ...(sizeId ? { productSizeId: sizeId } : {}),
+          ...(modifiers.length ? { modifiers } : {}),
+        };
+      }),
       ...(payments ? { payments } : {}),
       sourceKey: "uzbur-mobile",
     },

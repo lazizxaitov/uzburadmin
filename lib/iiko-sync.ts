@@ -1,11 +1,16 @@
 import "server-only";
 
+import fs from "node:fs";
+import path from "node:path";
+
 import { getDb, nowIso } from "@/lib/db";
 import {
   fetchIikoExternalMenu,
   fetchIikoExternalMenus,
 } from "@/lib/iiko";
+import { saveModifierGroups, type ModifierGroupInput } from "@/lib/product-modifiers";
 import { slugify } from "@/lib/slug";
+import { getDataDir } from "@/lib/storage";
 
 type IikoSettingsRow = {
   base_url: string;
@@ -22,33 +27,29 @@ type IikoSettingsRow = {
   last_sync_at: string | null;
 };
 
+// Ответ внешнего меню iiko бывает в разных версиях (v2: itemCategories/itemSizes/prices,
+// v3: itemsGroups/sizePrices), поэтому все поля читаем терпимо.
+type Raw = Record<string, unknown>;
+
 type IikoGroup = {
   id?: string;
   name?: string;
-  items?: IikoMenuItem[];
-};
-
-type IikoSizePrice = {
-  sizeName?: string;
-  isDefault?: boolean;
-  price?: number;
-  buttonImageUrl?: string;
-  image?: string;
-  isHidden?: boolean;
-};
-
-type IikoMenuItem = {
-  productId?: string;
-  menuItemId?: string;
-  name?: string;
-  description?: string;
-  sizePrices?: IikoSizePrice[];
-  isHidden?: boolean;
+  items?: Raw[];
 };
 
 type IikoProductMetadata = {
   id?: string;
+  name?: string;
   orderItemType?: string;
+};
+
+type ParsedSize = {
+  sizeId: string;
+  sizeName: string;
+  isDefault: boolean;
+  price: number;
+  images: string[];
+  modifierGroups: unknown[];
 };
 
 let syncInFlight: Promise<IikoSyncResult> | null = null;
@@ -57,10 +58,36 @@ export type IikoSyncResult = {
   ok: true;
   importedCategories: number;
   importedProducts: number;
+  importedModifierGroups: number;
 };
 
 function text(value: unknown) {
   return value == null ? "" : String(value).trim();
+}
+
+function num(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function asRecord(value: unknown): Raw {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Raw : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function firstPrice(record: Raw) {
+  const direct = num(record.price);
+  if (direct != null) return direct;
+  for (const key of ["prices", "sizePrices"]) {
+    for (const entry of asArray(record[key])) {
+      const price = num(asRecord(entry).price);
+      if (price != null) return price;
+    }
+  }
+  return null;
 }
 
 function getSettings() {
@@ -85,6 +112,91 @@ function deactivateMissing(
   `).run(now, ...ids);
 }
 
+function parseSizes(product: Raw): ParsedSize[] {
+  const rawSizes = asArray(product.sizePrices).length
+    ? asArray(product.sizePrices)
+    : asArray(product.itemSizes);
+  return rawSizes
+    .map(asRecord)
+    .filter((size) => size.isHidden !== true)
+    .map((size) => ({
+      sizeId: text(size.sizeId ?? size.id),
+      sizeName: text(size.sizeName ?? size.name),
+      isDefault: size.isDefault === true,
+      price: firstPrice(size),
+      images: [text(size.buttonImageUrl), text(size.image), text(size.buttonImageCroppedUrl)].filter(Boolean),
+      modifierGroups: [...asArray(size.itemModifierGroups), ...asArray(size.modifierGroups)],
+    }))
+    .filter((size): size is ParsedSize => size.price != null);
+}
+
+/** Превращает группы модификаторов iiko в формат нашей БД. */
+function parseModifierGroups(
+  rawGroups: unknown[],
+  metadataById: Map<string, IikoProductMetadata>,
+): ModifierGroupInput[] {
+  const seen = new Set<string>();
+  const result: ModifierGroupInput[] = [];
+  for (const entry of rawGroups) {
+    const group = asRecord(entry);
+    const restrictions = asRecord(group.restrictions);
+    const groupId = text(group.itemGroupId ?? group.id ?? group.modifierGroupId ?? group.productGroupId);
+    const name = text(group.name) || text(metadataById.get(groupId)?.name);
+    const key = groupId || name;
+    if (!key || seen.has(key)) continue;
+
+    const options = [...asArray(group.items), ...asArray(group.modifiers), ...asArray(group.childModifiers)]
+      .map(asRecord)
+      .filter((item) => item.isHidden !== true)
+      .map((item) => {
+        const itemRestrictions = asRecord(item.restrictions);
+        const iikoId = text(item.itemId ?? item.productId ?? item.id ?? item.modifierId);
+        const optionName = text(item.name) || text(metadataById.get(iikoId)?.name);
+        const maxQty = num(itemRestrictions.maxQuantity ?? item.maxQuantity ?? item.maxAmount) ?? 1;
+        const defaultQty = num(itemRestrictions.byDefault ?? item.byDefault ?? item.defaultAmount) ?? 0;
+        return {
+          iikoId,
+          nameRu: optionName,
+          nameUz: optionName,
+          price: Math.max(0, Math.round(firstPrice(item) ?? 0)),
+          maxQty: Math.max(1, Math.round(maxQty)),
+          defaultQty: Math.max(0, Math.round(defaultQty)),
+          isActive: true,
+        };
+      })
+      .filter((item) => item.iikoId && item.nameRu);
+    if (!options.length) continue;
+
+    seen.add(key);
+    const minQty = Math.max(0, Math.round(
+      num(restrictions.minQuantity ?? group.minQuantity ?? group.minAmount) ?? 0,
+    ));
+    const rawMax = num(restrictions.maxQuantity ?? group.maxQuantity ?? group.maxAmount);
+    const optionCapacity = options.reduce((sum, item) => sum + item.maxQty, 0);
+    // 0 / отсутствие maxQuantity в iiko означает «без ограничения».
+    const maxQty = rawMax && rawMax > 0 ? Math.round(rawMax) : optionCapacity;
+    result.push({
+      iikoGroupId: groupId,
+      nameRu: name || "Модификаторы",
+      nameUz: name || "Modifikatorlar",
+      minQty,
+      maxQty: Math.max(minQty, 1, maxQty),
+      freeQty: Math.max(0, Math.round(num(restrictions.freeQuantity ?? group.freeQuantity) ?? 0)),
+      options,
+    });
+  }
+  return result;
+}
+
+function saveRawMenu(menu: unknown) {
+  // Последний ответ iiko — для диагностики модификаторов. Ошибки записи не критичны.
+  try {
+    fs.writeFileSync(path.join(getDataDir(), "iiko-last-menu.json"), JSON.stringify(menu, null, 2));
+  } catch {
+    // ignore
+  }
+}
+
 export async function runIikoSync(): Promise<IikoSyncResult> {
   if (syncInFlight) return syncInFlight;
 
@@ -98,6 +210,7 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
     const now = nowIso();
     let importedCategories = 0;
     let importedProducts = 0;
+    let importedModifierGroups = 0;
 
     try {
       const menuList = await fetchIikoExternalMenus(settings);
@@ -113,15 +226,28 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
         settings.organization_id,
         externalMenu.id,
       );
-      const groups = Array.isArray(result.itemsGroups)
-        ? result.itemsGroups as IikoGroup[]
-        : [];
-      const productMetadata = Array.isArray(result.products)
-        ? result.products as IikoProductMetadata[]
-        : [];
+      saveRawMenu(result);
+      const groups = (asArray(result.itemsGroups).length
+        ? asArray(result.itemsGroups)
+        : asArray(result.itemCategories)) as IikoGroup[];
+      const productMetadata = asArray(result.products) as IikoProductMetadata[];
       const metadataById = new Map(
         productMetadata.map((item) => [text(item.id), item]),
       );
+      // Схемы модификаторов (если меню ссылается на них по id).
+      const schemaById = new Map<string, unknown[]>();
+      for (const key of ["modifierSchemas", "modifierGroups", "itemModifierGroups"]) {
+        for (const entry of asArray(result[key])) {
+          const schema = asRecord(entry);
+          const id = text(schema.id ?? schema.modifierSchemaId);
+          if (!id) continue;
+          schemaById.set(id, [...asArray(schema.itemModifierGroups), ...asArray(schema.modifierGroups), ...(
+            asArray(schema.items).length && !asArray(schema.itemModifierGroups).length && !asArray(schema.modifierGroups).length
+              ? [schema]
+              : []
+          )]);
+        }
+      }
       const menuItemCount = groups.reduce(
         (total, group) => total + (Array.isArray(group.items) ? group.items.length : 0),
         0,
@@ -192,81 +318,115 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
         `);
         const clearImages = db.prepare("DELETE FROM product_images WHERE product_id = ?");
         const insertImage = db.prepare("INSERT INTO product_images (product_id, url, sort_order) VALUES (?, ?, ?)");
-        const clearPortions = db.prepare("DELETE FROM portion_options WHERE product_id = ?");
-        const insertPortion = db.prepare("INSERT INTO portion_options (product_id, label_ru, label_uz, price) VALUES (?, ?, ?, ?)");
+        const selectPortions = db.prepare(
+          "SELECT id, label_ru, iiko_size_id FROM portion_options WHERE product_id = ?",
+        );
+        const updatePortion = db.prepare(
+          "UPDATE portion_options SET label_ru = ?, label_uz = ?, price = ?, iiko_size_id = ? WHERE id = ?",
+        );
+        const deletePortion = db.prepare("DELETE FROM portion_options WHERE id = ?");
+        const insertPortion = db.prepare(
+          "INSERT INTO portion_options (product_id, label_ru, label_uz, price, iiko_size_id) VALUES (?, ?, ?, ?, ?)",
+        );
 
         const seenProducts = new Set<string>();
-        for (const group of groups) {
-          const categoryIikoId = text(group.id);
-          const category = categoryIikoId
-            ? findCategory.get(categoryIikoId) as { id: number } | undefined
-            : undefined;
+        const importProducts = db.transaction(() => {
+          for (const group of groups) {
+            const categoryIikoId = text(group.id);
+            const category = categoryIikoId
+              ? findCategory.get(categoryIikoId) as { id: number } | undefined
+              : undefined;
 
-          for (const product of group.items ?? []) {
-            const id = text(product.productId);
-            const name = text(product.name);
-            const metadata = metadataById.get(id);
-            if (
-              !id ||
-              !name ||
-              seenProducts.has(id) ||
-              text(metadata?.orderItemType).toLowerCase() === "modifier"
-            ) continue;
+            for (const product of group.items ?? []) {
+              const id = text(product.productId ?? product.itemId);
+              const name = text(product.name);
+              const metadata = metadataById.get(id);
+              const orderItemType = text(metadata?.orderItemType ?? product.orderItemType).toLowerCase();
+              if (!id || !name || seenProducts.has(id) || orderItemType === "modifier") continue;
 
-            const availablePrices = (product.sizePrices ?? []).filter(
-              (item) => item.isHidden !== true && Number.isFinite(Number(item.price)),
-            );
-            if (!availablePrices.length) continue;
+              const availablePrices = parseSizes(product);
+              if (!availablePrices.length) continue;
 
-            seenProducts.add(id);
-            const defaultPrice = availablePrices.find((item) => item.isDefault)
-              ?? availablePrices[0];
-            const price = Math.round(Number(defaultPrice.price ?? 0));
-            const description = text(product.description);
+              seenProducts.add(id);
+              const defaultSize = availablePrices.find((item) => item.isDefault)
+                ?? availablePrices[0];
+              const price = Math.round(defaultSize.price);
+              const description = text(product.description);
 
-            importedIds.push(id);
-            upsert.run(
-              id,
-              category?.id ?? null,
-              name,
-              name,
-              description,
-              description,
-              price,
-              availablePrices.length > 1 ? "portion" : "quantity",
-              product.isHidden === true ? 0 : 1,
-              now,
-              now,
-            );
+              importedIds.push(id);
+              upsert.run(
+                id,
+                category?.id ?? null,
+                name,
+                name,
+                description,
+                description,
+                price,
+                availablePrices.length > 1 ? "portion" : "quantity",
+                product.isHidden === true ? 0 : 1,
+                now,
+                now,
+              );
 
-            const row = findProduct.get(id) as { id: number };
-            if (settings.import_images === 1) {
-              clearImages.run(row.id);
-              const imageUrls = [...new Set(
-                availablePrices
-                  .flatMap((item) => [text(item.buttonImageUrl), text(item.image)])
-                  .filter(Boolean),
-              )];
-              imageUrls.forEach((url, imageIndex) => {
-                insertImage.run(row.id, url, imageIndex);
-              });
+              const row = findProduct.get(id) as { id: number };
+              if (settings.import_images === 1) {
+                clearImages.run(row.id);
+                const imageUrls = [...new Set([
+                  ...availablePrices.flatMap((item) => item.images),
+                  text(product.buttonImageUrl),
+                ].filter(Boolean))];
+                imageUrls.forEach((url, imageIndex) => {
+                  insertImage.run(row.id, url, imageIndex);
+                });
+              }
+
+              // Сохраняем ID порций (по iiko sizeId или названию), чтобы не ломать корзины.
+              const existingPortions = selectPortions.all(row.id) as Array<{
+                id: number;
+                label_ru: string;
+                iiko_size_id: string;
+              }>;
+              const keptPortionIds: number[] = [];
+              if (availablePrices.length > 1) {
+                availablePrices.forEach((item, portionIndex) => {
+                  const label = item.sizeName || `Размер ${portionIndex + 1}`;
+                  const match = existingPortions.find((portion) =>
+                    !keptPortionIds.includes(portion.id) && (
+                      (item.sizeId && portion.iiko_size_id === item.sizeId) ||
+                      (!portion.iiko_size_id && portion.label_ru === label)
+                    ));
+                  if (match) {
+                    updatePortion.run(label, label, Math.round(item.price), item.sizeId, match.id);
+                    keptPortionIds.push(match.id);
+                  } else {
+                    keptPortionIds.push(Number(
+                      insertPortion.run(row.id, label, label, Math.round(item.price), item.sizeId).lastInsertRowid,
+                    ));
+                  }
+                });
+              }
+              for (const portion of existingPortions) {
+                if (!keptPortionIds.includes(portion.id)) deletePortion.run(portion.id);
+              }
+
+              // Модификаторы: у размера по умолчанию, у самого товара или в схеме по id.
+              const schemaId = text(product.modifierSchemaId);
+              const modifierGroups = parseModifierGroups(
+                [
+                  ...defaultSize.modifierGroups,
+                  ...asArray(product.itemModifierGroups),
+                  ...asArray(product.modifierGroups),
+                  ...(schemaId ? schemaById.get(schemaId) ?? [] : []),
+                ],
+                metadataById,
+              );
+              saveModifierGroups(row.id, modifierGroups, { fromSync: true });
+              importedModifierGroups += modifierGroups.length;
+              importedProducts += 1;
             }
-
-            clearPortions.run(row.id);
-            if (availablePrices.length > 1) {
-              availablePrices.forEach((item, portionIndex) => {
-                const label = text(item.sizeName) || `Размер ${portionIndex + 1}`;
-                insertPortion.run(
-                  row.id,
-                  label,
-                  label,
-                  Math.round(Number(item.price ?? 0)),
-                );
-              });
-            }
-            importedProducts += 1;
           }
-        }
+        });
+        importProducts();
         deactivateMissing("products", importedIds, now);
       }
 
@@ -278,11 +438,11 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
       `).run(
         Number(result.revision ?? 0),
         now,
-        `Imported ${importedCategories} categories and ${importedProducts} products`,
+        `Imported ${importedCategories} categories, ${importedProducts} products, ${importedModifierGroups} modifier groups`,
         now,
       );
 
-      return { ok: true, importedCategories, importedProducts };
+      return { ok: true, importedCategories, importedProducts, importedModifierGroups };
     } catch (error) {
       const message = error instanceof Error ? error.message : "iiko sync failed";
       db.prepare(`

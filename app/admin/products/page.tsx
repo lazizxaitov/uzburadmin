@@ -10,6 +10,11 @@ import {
   Modal,
 } from "../_components/ui";
 import ImageCropper from "../_components/image-cropper";
+import ModifierGroupsEditor, {
+  modifierGroupsFromApi,
+  type ModifierGroupApi,
+  type ModifierGroupForm,
+} from "../_components/modifier-groups-editor";
 
 type Category = {
   id: number;
@@ -18,6 +23,7 @@ type Category = {
 };
 
 type PortionOption = {
+  id?: number;
   labelRu: string;
   labelUz: string;
   price: number;
@@ -43,7 +49,10 @@ type Product = {
   is_active: number;
   is_popular: number;
   images: string[];
+  synced_from_iiko?: number;
+  modifierGroups?: ModifierGroupApi[];
   portionOptions: Array<{
+    id?: number;
     label_ru: string;
     label_uz: string;
     price: number;
@@ -82,6 +91,7 @@ export default function ProductsPage() {
     isPopular: false,
     images: [] as string[],
     portionOptions: [] as PortionOption[],
+    modifierGroups: [] as ModifierGroupForm[],
   });
 
   const load = () => {
@@ -119,6 +129,7 @@ export default function ProductsPage() {
       isPopular: false,
       images: [],
       portionOptions: [],
+      modifierGroups: [],
     });
     setCategoryOpen(false);
     setCategoryQuery("");
@@ -143,10 +154,12 @@ export default function ProductsPage() {
       images: item.images ?? [],
       portionOptions:
         item.portionOptions?.map((option) => ({
+          id: option.id,
           labelRu: option.label_ru,
           labelUz: option.label_uz,
           price: option.price,
         })) ?? [],
+      modifierGroups: modifierGroupsFromApi(item.modifierGroups),
     });
     setCategoryOpen(false);
     setCategoryQuery("");
@@ -221,6 +234,7 @@ export default function ProductsPage() {
       isPopular: form.isPopular,
       images: form.images,
       portionOptions: form.portionOptions,
+      modifierGroups: form.modifierGroups,
     };
 
     const response = editingId
@@ -474,6 +488,11 @@ export default function ProductsPage() {
                     <span>{item.is_active ? "Активен" : "Скрыт"}</span>
                     {item.is_popular ? (
                       <span className="font-bold text-amber-600">★ Популярный</span>
+                    ) : null}
+                    {item.modifierGroups?.length ? (
+                      <span className="font-semibold text-[var(--accent,#7c5a2b)]">
+                        Модификаторы: {item.modifierGroups.length}
+                      </span>
                     ) : null}
                   </div>
                   <p className="mt-2 text-sm font-semibold text-[var(--ink)]">
@@ -824,6 +843,14 @@ export default function ProductsPage() {
             ))}
           </div>
         ) : null}
+
+        <ModifierGroupsEditor
+          value={form.modifierGroups}
+          onChange={(modifierGroups) => setForm((prev) => ({ ...prev, modifierGroups }))}
+          syncedFromIiko={
+            items.find((item) => item.id === editingId)?.synced_from_iiko === 1
+          }
+        />
 
         <div className="mt-4">
           <label className="text-sm font-semibold">

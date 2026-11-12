@@ -405,6 +405,39 @@ ensureColumn("poster_settings", "webhook_secret", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("poster_settings", "send_orders_to_poster", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("poster_settings", "order_spot_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("customers", "password_hash", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("portion_options", "iiko_size_id", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("order_items", "options_json", "TEXT NOT NULL DEFAULT ''");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS modifier_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    iiko_group_id TEXT NOT NULL DEFAULT '',
+    name_ru TEXT NOT NULL,
+    name_uz TEXT NOT NULL,
+    min_qty INTEGER NOT NULL DEFAULT 0,
+    max_qty INTEGER NOT NULL DEFAULT 1,
+    free_qty INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_modifier_groups_product ON modifier_groups(product_id, sort_order);
+
+  CREATE TABLE IF NOT EXISTS modifier_options (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    iiko_id TEXT NOT NULL DEFAULT '',
+    name_ru TEXT NOT NULL,
+    name_uz TEXT NOT NULL,
+    price INTEGER NOT NULL DEFAULT 0,
+    max_qty INTEGER NOT NULL DEFAULT 1,
+    default_qty INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_modifier_options_group ON modifier_options(group_id, sort_order);
+`);
 
 const now = new Date().toISOString();
 

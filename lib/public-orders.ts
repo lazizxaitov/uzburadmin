@@ -1,9 +1,12 @@
 import { getDb, nowIso } from "@/lib/db";
 import { validateDelivery } from "@/lib/delivery-validation";
+import { loadModifierGroups, type OrderItemOptions } from "@/lib/product-modifiers";
 
 export type OrderItemInput = {
   productId: number;
   quantity: number;
+  portionId: number;
+  modifiers: Array<{ id: number; quantity: number }>;
 };
 
 export type AddressInput = {
@@ -35,6 +38,7 @@ export type PreparedOrder = {
     price: number;
     quantity: number;
     total: number;
+    options: OrderItemOptions | null;
   }>;
   subtotal: number;
   deliveryFee: number;
@@ -98,7 +102,13 @@ export function preparePublicOrder(body: unknown):
       const productId = toPositiveInt(record?.productId);
       const quantity = toPositiveInt(record?.quantity);
       if (!productId || !quantity) return null;
-      return { productId, quantity };
+      const modifiers = (Array.isArray(record?.modifiers) ? record.modifiers : [])
+        .map((entry: unknown) => {
+          const modifier = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+          return { id: toPositiveInt(modifier.id), quantity: toPositiveInt(modifier.quantity ?? 1) };
+        })
+        .filter((modifier: { id: number; quantity: number }) => modifier.id && modifier.quantity);
+      return { productId, quantity, portionId: toPositiveInt(record?.portionId), modifiers };
     })
     .filter((item: OrderItemInput | null): item is OrderItemInput => item !== null);
 
@@ -153,17 +163,106 @@ export function preparePublicOrder(body: unknown):
     return { ok: false, status: 400, error: "Один из товаров сейчас недоступен" };
   }
 
-  const normalizedItems = items.map((item: OrderItemInput) => {
+  const portionRows = db.prepare(`
+    SELECT id, product_id, label_ru, price, iiko_size_id
+    FROM portion_options
+    WHERE product_id IN (${productIds.map(() => "?").join(",")})
+  `).all(...productIds) as Array<{
+    id: number;
+    product_id: number;
+    label_ru: string;
+    price: number;
+    iiko_size_id: string;
+  }>;
+  const modifierGroupsByProduct = loadModifierGroups(productIds, { onlyActive: true });
+
+  const normalizedItems: PreparedOrder["normalizedItems"] = [];
+  for (const item of items) {
     const product = productsById.get(item.productId)!;
-    const price = Number(product.price ?? 0);
-    return {
+    let price = Number(product.price ?? 0);
+    const titleParts: string[] = [];
+    const options: OrderItemOptions = { portion: null, modifiers: [] };
+
+    // Порция (размер). Старые версии приложения не присылают portionId — тогда базовая цена.
+    if (item.portionId) {
+      const portion = portionRows.find(
+        (row) => row.id === item.portionId && row.product_id === product.id,
+      );
+      if (!portion) {
+        return { ok: false, status: 400, error: `Размер товара «${product.title_ru}» больше недоступен` };
+      }
+      price = Number(portion.price ?? 0);
+      titleParts.push(portion.label_ru);
+      options.portion = {
+        id: portion.id,
+        label: portion.label_ru,
+        price: portion.price,
+        iikoSizeId: portion.iiko_size_id ?? "",
+      };
+    }
+
+    // Модификаторы: проверяем принадлежность товару и ограничения групп.
+    const groups = modifierGroupsByProduct.get(product.id) ?? [];
+    const selected = new Map<number, number>();
+    for (const modifier of item.modifiers) {
+      selected.set(modifier.id, (selected.get(modifier.id) ?? 0) + modifier.quantity);
+    }
+    const knownOptionIds = new Set(groups.flatMap((group) => group.options.map((option) => option.id)));
+    for (const optionId of selected.keys()) {
+      if (!knownOptionIds.has(optionId)) {
+        return { ok: false, status: 400, error: `Опция товара «${product.title_ru}» больше недоступна, обновите корзину` };
+      }
+    }
+    let modifiersPrice = 0;
+    for (const group of groups) {
+      const units: number[] = [];
+      let groupQty = 0;
+      for (const option of group.options) {
+        const qty = selected.get(option.id) ?? 0;
+        if (!qty) continue;
+        if (qty > option.max_qty) {
+          return { ok: false, status: 400, error: `Слишком много «${option.name_ru}»` };
+        }
+        groupQty += qty;
+        for (let i = 0; i < qty; i += 1) units.push(option.price);
+        options.modifiers.push({
+          id: option.id,
+          groupId: group.id,
+          name: option.name_ru,
+          price: option.price,
+          quantity: qty,
+          iikoId: option.iiko_id,
+          iikoGroupId: group.iiko_group_id,
+        });
+        titleParts.push(qty > 1 ? `${option.name_ru} ×${qty}` : option.name_ru);
+      }
+      if (groupQty < group.min_qty) {
+        return {
+          ok: false,
+          status: 400,
+          error: `Для «${product.title_ru}» выберите: ${group.name_ru}`,
+        };
+      }
+      if (groupQty > group.max_qty) {
+        return { ok: false, status: 400, error: `«${group.name_ru}»: можно выбрать не больше ${group.max_qty}` };
+      }
+      // Бесплатное количество в группе — самые дешёвые единицы не оплачиваются.
+      units.sort((a, b) => a - b);
+      modifiersPrice += units.slice(Math.min(group.free_qty, units.length)).reduce((sum, value) => sum + value, 0);
+    }
+    options.basePrice = price;
+    price += modifiersPrice;
+
+    const hasOptions = Boolean(options.portion) || options.modifiers.length > 0;
+    normalizedItems.push({
       productId: product.id,
-      title: product.title_ru,
+      title: titleParts.length ? `${product.title_ru} (${titleParts.join(", ")})` : product.title_ru,
       price,
       quantity: item.quantity,
       total: price * item.quantity,
-    };
-  });
+      options: hasOptions ? options : null,
+    });
+  }
 
   const subtotal = normalizedItems.reduce(
     (sum: number, item: { total: number }) => sum + item.total,
@@ -243,8 +342,8 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
 
     const orderId = Number(orderResult.lastInsertRowid);
     const insertItem = db.prepare(`
-      INSERT INTO order_items (order_id, product_id, title, price, quantity, total)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO order_items (order_id, product_id, title, price, quantity, total, options_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of prepared.normalizedItems) {
@@ -254,7 +353,8 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
         item.title,
         item.price,
         item.quantity,
-        item.total
+        item.total,
+        item.options ? JSON.stringify(item.options) : ""
       );
     }
 
