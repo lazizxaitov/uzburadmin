@@ -171,41 +171,82 @@ function parseSizes(product: Raw): ParsedSize[] {
     .filter((size): size is ParsedSize => size.price != null);
 }
 
-/** Превращает группы модификаторов iiko в формат нашей БД. */
+// Справочник модификаторов меню v3 (MenuV3.modifiers): имя, ограничения и цены по размерам.
+// В ModifierGroup.items цены нет — она только здесь, в sizePrices[{ sizeId, price }].
+let modifierRefById = new Map<string, Raw>();
+
+/** Цены модификатора по размерам товара: iiko sizeId → цена ("" — товар без размеров). */
+function modifierSizePrices(item: Raw, ref: Raw) {
+  const map: Record<string, number> = {};
+  for (const source of [ref.sizePrices, item.sizePrices, item.prices, ref.prices]) {
+    for (const entry of asArray(source)) {
+      const record = asRecord(entry);
+      const price = priceOf(record.price ?? record);
+      if (price == null) continue;
+      const sizeId = text(record.sizeId);
+      if (!(sizeId in map)) map[sizeId] = Math.max(0, Math.round(price));
+    }
+  }
+  return map;
+}
+
+/**
+ * Превращает группы модификаторов iiko в формат нашей БД.
+ * Поддерживает меню v3 (modifierGroups + справочник modifiers) и v2 (itemModifierGroups с prices).
+ */
 function parseModifierGroups(
   rawGroups: unknown[],
   metadataById: Map<string, IikoProductMetadata>,
+  defaultSizeId: string,
 ): ModifierGroupInput[] {
   const seen = new Set<string>();
   const result: ModifierGroupInput[] = [];
   for (const entry of rawGroups) {
     const group = asRecord(entry);
+    if (group.isHidden === true) continue;
     const restrictions = asRecord(group.restrictions);
-    const groupId = text(group.itemGroupId ?? group.id ?? group.modifierGroupId ?? group.productGroupId);
+    const groupId = text(group.id ?? group.itemGroupId ?? group.modifierGroupId ?? group.productGroupId);
     const name = text(group.name) || text(metadataById.get(groupId)?.name);
     const key = groupId || name;
     if (!key || seen.has(key)) continue;
 
     const options = [...asArray(group.items), ...asArray(group.modifiers), ...asArray(group.childModifiers)]
       .map(asRecord)
-      .filter((item) => item.isHidden !== true)
       .map((item) => {
-        const itemRestrictions = asRecord(item.restrictions);
-        const iikoId = text(item.itemId ?? item.productId ?? item.id ?? item.modifierId);
-        const optionName = text(item.name) || text(metadataById.get(iikoId)?.name);
-        const maxQty = num(itemRestrictions.maxQuantity ?? item.maxQuantity ?? item.maxAmount) ?? 1;
-        const defaultQty = num(itemRestrictions.byDefault ?? item.byDefault ?? item.defaultAmount) ?? 0;
+        const iikoId = text(item.id ?? item.itemId ?? item.productId ?? item.modifierId);
+        const ref = modifierRefById.get(iikoId) ?? {};
+        // Поля ModifierItem со значением null берутся из справочника Modifier с тем же id.
+        const hidden = (item.isHidden ?? ref.isHidden) === true;
+        const itemRestrictions = asRecord(item.restrictions ?? ref.restrictions);
+        const optionName =
+          text(item.name) || text(ref.name) || text(metadataById.get(iikoId)?.name);
+        const maxQty = num(itemRestrictions.maxQuantity ?? item.maxQuantity ?? item.maxAmount);
+        const defaultQty = num(
+          itemRestrictions.defaultQuantity ?? itemRestrictions.byDefault ?? item.byDefault ?? item.defaultAmount,
+        ) ?? 0;
+        const sizePrices = modifierSizePrices(item, ref);
+        const price =
+          sizePrices[defaultSizeId] ?? sizePrices[""] ?? Object.values(sizePrices)[0] ??
+          Math.max(0, Math.round(firstPrice(item) ?? 0));
         return {
+          hidden,
           iikoId,
           nameRu: optionName,
           nameUz: optionName,
-          price: Math.max(0, Math.round(firstPrice(item) ?? 0)),
-          maxQty: Math.max(1, Math.round(maxQty)),
+          price,
+          sizePrices,
+          // 0 / нет maxQuantity у модификатора — без отдельного лимита (ограничит группа).
+          maxQty: Math.max(1, Math.round(maxQty && maxQty > 0 ? maxQty : 1)),
           defaultQty: Math.max(0, Math.round(defaultQty)),
           isActive: true,
         };
       })
-      .filter((item) => item.iikoId && item.nameRu);
+      .filter((item) => !item.hidden && item.iikoId && item.nameRu)
+      .map((item) => {
+        const { hidden, ...option } = item;
+        void hidden;
+        return option;
+      });
     if (!options.length) continue;
 
     seen.add(key);
@@ -269,6 +310,12 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
       );
       saveRawMenu(result);
       priceOrganizationId = settings.organization_id;
+      modifierRefById = new Map(
+        asArray(result.modifiers)
+          .map(asRecord)
+          .map((item) => [text(item.id), item] as const)
+          .filter(([id]) => Boolean(id)),
+      );
       sizeNameById = new Map();
       for (const key of ["sizes", "productSizes", "itemSizes"]) {
         for (const entry of asArray(result[key])) {
@@ -470,6 +517,7 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
                   ...(schemaId ? schemaById.get(schemaId) ?? [] : []),
                 ],
                 metadataById,
+                defaultSize.sizeId,
               );
               saveModifierGroups(row.id, modifierGroups, { fromSync: true });
               importedModifierGroups += modifierGroups.length;

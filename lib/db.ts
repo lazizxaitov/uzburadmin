@@ -409,6 +409,7 @@ ensureColumn("customers", "password_hash", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("portion_options", "iiko_size_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("order_items", "options_json", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "branch_id", "INTEGER");
+ensureColumn("modifier_options", "size_prices", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "branch_name", "TEXT NOT NULL DEFAULT ''");
 
 db.exec(`

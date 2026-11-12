@@ -11,6 +11,8 @@ export type ModifierOption = {
   max_qty: number;
   default_qty: number;
   is_active: number;
+  /** JSON { iikoSizeId: цена } — цена модификатора для конкретного размера товара. */
+  size_prices: string;
 };
 
 export type ModifierGroup = {
@@ -42,6 +44,7 @@ export type ModifierGroupInput = {
     maxQty: number;
     defaultQty?: number;
     isActive?: boolean;
+    sizePrices?: Record<string, number>;
   }>;
 };
 
@@ -169,13 +172,14 @@ export function saveModifierGroups(
   `);
   const selectOptions = db.prepare("SELECT id, iiko_id FROM modifier_options WHERE group_id = ?");
   const insertOption = db.prepare(`
-    INSERT INTO modifier_options (group_id, iiko_id, name_ru, name_uz, price, max_qty, default_qty, is_active, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO modifier_options (group_id, iiko_id, name_ru, name_uz, price, max_qty, default_qty, is_active, sort_order, size_prices)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateOption = db.prepare(`
     UPDATE modifier_options
     SET iiko_id = ?, name_ru = ?, ${nameUzSql}, price = ?, max_qty = ?, default_qty = ?,
-        is_active = ${fromSync ? "is_active + 0 * ?" : "?"}, sort_order = ?
+        is_active = ${fromSync ? "is_active + 0 * ?" : "?"}, sort_order = ?,
+        size_prices = ${fromSync ? "?" : "CASE WHEN ? IS NULL THEN size_prices ELSE size_prices END"}
     WHERE id = ?
   `);
 
@@ -223,6 +227,8 @@ export function saveModifierGroups(
         option.defaultQty ?? 0,
         option.isActive === false ? 0 : 1,
         optionIndex,
+        // Цены по размерам приходят только из iiko; ручное сохранение их не трогает.
+        option.sizePrices && Object.keys(option.sizePrices).length ? JSON.stringify(option.sizePrices) : "",
       ] as const;
       if (optionId) {
         updateOption.run(...optionValues, optionId);
@@ -291,3 +297,15 @@ export type OrderItemOptions = {
     iikoGroupId: string;
   }>;
 };
+
+/** Цена модификатора для размера товара (iiko sizeId); без размера — базовая цена опции. */
+export function modifierPriceForSize(option: Pick<ModifierOption, "price" | "size_prices">, iikoSizeId?: string | null) {
+  if (!option.size_prices) return option.price;
+  try {
+    const map = JSON.parse(option.size_prices) as Record<string, number>;
+    if (iikoSizeId && typeof map[iikoSizeId] === "number") return map[iikoSizeId];
+  } catch {
+    // повреждённый JSON — используем базовую цену
+  }
+  return option.price;
+}

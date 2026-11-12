@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { maybeAutoSyncPoster } from "@/lib/poster-sync";
 import { maybeAutoSyncIiko } from "@/lib/iiko-sync";
-import { loadModifierGroups } from "@/lib/product-modifiers";
+import { loadModifierGroups, modifierPriceForSize } from "@/lib/product-modifiers";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
 import { resolvePublicUrl } from "@/lib/public-url";
 
@@ -46,13 +46,14 @@ export async function GET() {
   ).all() as Array<Record<string, unknown>>;
   const images = db.prepare("SELECT product_id, url FROM product_images ORDER BY sort_order ASC").all() as Array<{ product_id: number; url: string }>;
   const portionRows = db
-    .prepare("SELECT product_id, id, label_ru, label_uz, price FROM portion_options ORDER BY id ASC")
+    .prepare("SELECT product_id, id, label_ru, label_uz, price, iiko_size_id FROM portion_options ORDER BY id ASC")
     .all() as Array<{
     product_id: number;
     id: number;
     label_ru: string;
     label_uz: string;
     price: number;
+    iiko_size_id: string;
   }>;
 
   const imagesByProduct = new Map<number, string[]>();
@@ -97,6 +98,12 @@ export async function GET() {
         price: option.price,
         max_qty: option.max_qty,
         default_qty: option.default_qty,
+        // Цена модификатора для каждого размера товара: { portionId: цена }.
+        portion_prices: Object.fromEntries(
+          portionRows
+            .filter((portion) => portion.product_id === Number(item.id) && portion.iiko_size_id)
+            .map((portion) => [String(portion.id), modifierPriceForSize(option, portion.iiko_size_id)]),
+        ),
       })),
     })),
   }));

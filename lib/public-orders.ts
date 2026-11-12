@@ -1,7 +1,7 @@
 import { getDb, nowIso } from "@/lib/db";
 import { resolveBranchForAddress, type Branch } from "@/lib/branches";
 import { validateDelivery } from "@/lib/delivery-validation";
-import { loadModifierGroups, type OrderItemOptions } from "@/lib/product-modifiers";
+import { loadModifierGroups, modifierPriceForSize, type OrderItemOptions } from "@/lib/product-modifiers";
 
 export type OrderItemInput = {
   productId: number;
@@ -233,12 +233,13 @@ export function preparePublicOrder(body: unknown):
           return { ok: false, status: 400, error: `Слишком много «${option.name_ru}»` };
         }
         groupQty += qty;
-        for (let i = 0; i < qty; i += 1) units.push(option.price);
+        const optionPrice = modifierPriceForSize(option, options.portion?.iikoSizeId);
+        for (let i = 0; i < qty; i += 1) units.push(optionPrice);
         options.modifiers.push({
           id: option.id,
           groupId: group.id,
           name: option.name_ru,
-          price: option.price,
+          price: optionPrice,
           quantity: qty,
           iikoId: option.iiko_id,
           iikoGroupId: group.iiko_group_id,
