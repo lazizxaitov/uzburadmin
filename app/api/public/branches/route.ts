@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { listBranches } from "@/lib/branches";
+import { isBranchOpen, listBranches } from "@/lib/branches";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
 
 export const runtime = "nodejs";
@@ -23,6 +23,9 @@ export async function GET() {
     longitude: branch.longitude,
     paymeUrl: branch.payme_url,
     clickUrl: branch.click_url,
+    openTime: branch.open_time,
+    closeTime: branch.close_time,
+    isOpen: isBranchOpen(branch),
   }));
   return NextResponse.json({ items });
 }

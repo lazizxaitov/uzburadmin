@@ -441,6 +441,8 @@ db.exec(`
 `);
 ensureColumn("branches", "payme_url", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("branches", "click_url", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("branches", "open_time", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("branches", "close_time", "TEXT NOT NULL DEFAULT ''");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS modifier_groups (

@@ -25,6 +25,8 @@ type Branch = {
   iiko_check_error: string;
   payme_url: string;
   click_url: string;
+  open_time: string;
+  close_time: string;
 };
 
 type Option = { id: string; name: string };
@@ -50,6 +52,8 @@ const emptyForm = {
   iikoPaymentTypeKind: "Card",
   paymeUrl: "",
   clickUrl: "",
+  openTime: "",
+  closeTime: "",
 };
 
 const inputClass =
@@ -131,6 +135,8 @@ export default function BranchesPage() {
       iikoPaymentTypeKind: item.iiko_payment_type_kind || "Card",
       paymeUrl: item.payme_url ?? "",
       clickUrl: item.click_url ?? "",
+      openTime: item.open_time ?? "",
+      closeTime: item.close_time ?? "",
     });
     setRefs(null);
     setError(null);
@@ -200,6 +206,8 @@ export default function BranchesPage() {
       iikoPaymentTypeKind: paymentKind || "Card",
       paymeUrl: form.paymeUrl,
       clickUrl: form.clickUrl,
+      openTime: form.openTime,
+      closeTime: form.closeTime,
     };
     try {
       const response = await fetch(editingId ? `/api/branches/${editingId}` : "/api/branches", {
@@ -342,6 +350,12 @@ export default function BranchesPage() {
                   )}
                 </span>
                 <span>
+                  Часы работы:{" "}
+                  {item.open_time && item.close_time
+                    ? `${item.open_time}–${item.close_time}`
+                    : "круглосуточно"}
+                </span>
+                <span>
                   Радиус: {item.delivery_radius_km > 0 ? `${item.delivery_radius_km} км` : "без ограничения"}
                 </span>
                 <span>iiko ключ: {maskKey(item.iiko_api_key)}</span>
@@ -433,6 +447,31 @@ export default function BranchesPage() {
                 className={inputClass}
               />
             </details>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="text-sm font-semibold">
+              Открытие
+              <input
+                type="time"
+                value={form.openTime}
+                onChange={(event) => setForm((prev) => ({ ...prev, openTime: event.target.value }))}
+                className={inputClass}
+              />
+            </label>
+            <label className="text-sm font-semibold">
+              Закрытие
+              <input
+                type="time"
+                value={form.closeTime}
+                onChange={(event) => setForm((prev) => ({ ...prev, closeTime: event.target.value }))}
+                className={inputClass}
+              />
+            </label>
+            <p className="self-end pb-2 text-xs text-[var(--muted)]">
+              Время Ташкента. Можно через полночь (10:00–02:00). Пусто — круглосуточно. В
+              закрытый филиал заказ не уйдёт.
+            </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">

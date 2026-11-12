@@ -1,5 +1,12 @@
 import { getDb, nowIso } from "@/lib/db";
-import { getBranch, resolveBranchForAddress, type Branch, type BranchResolution } from "@/lib/branches";
+import {
+  branchHoursText,
+  getBranch,
+  isBranchOpen,
+  resolveBranchForAddress,
+  type Branch,
+  type BranchResolution,
+} from "@/lib/branches";
 import { validateDelivery } from "@/lib/delivery-validation";
 import { loadModifierGroups, modifierPriceForSize, type OrderItemOptions } from "@/lib/product-modifiers";
 
@@ -164,9 +171,16 @@ export function preparePublicOrder(body: unknown):
   } else {
     // Самовывоз / на месте: филиал выбирает клиент на карте.
     const branch = getBranch(toPositiveInt(payload.branchId));
-    branchResolution = branch && branch.is_active === 1
-      ? { ok: true, branch, distanceKm: null }
-      : { ok: false, error: "Выберите филиал" };
+    branchResolution = !branch || branch.is_active !== 1
+      ? { ok: false, error: "Выберите филиал" }
+      : !isBranchOpen(branch)
+        ? {
+            ok: false,
+            error: `Филиал «${branch.name}» сейчас закрыт${
+              branchHoursText(branch) ? ` (работает ${branchHoursText(branch)})` : ""
+            }`,
+          }
+        : { ok: true, branch, distanceKm: null };
   }
   if (!branchResolution.ok) {
     return { ok: false, status: 400, error: branchResolution.error };
