@@ -409,6 +409,10 @@ ensureColumn("customers", "password_hash", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("portion_options", "iiko_size_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("order_items", "options_json", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "branch_id", "INTEGER");
+ensureColumn("orders", "order_type", "TEXT NOT NULL DEFAULT 'delivery'");
+ensureColumn("orders", "iiko_status", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("iiko_settings", "webhook_token", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("iiko_settings", "last_status_poll_at", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("modifier_options", "size_prices", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "branch_name", "TEXT NOT NULL DEFAULT ''");
 

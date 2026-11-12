@@ -169,3 +169,45 @@ export async function createIikoDelivery(
     payload,
   );
 }
+
+export async function fetchIikoDeliveriesById(
+  settings: IikoSettings,
+  organizationId: string,
+  orderIds: string[],
+) {
+  return authorizedPost<{ orders?: Array<Record<string, unknown>> }>(
+    settings,
+    "/api/1/deliveries/by_id",
+    { organizationId, orderIds },
+  );
+}
+
+export async function updateIikoWebhookSettings(
+  settings: IikoSettings,
+  payload: {
+    organizationId: string;
+    webHooksUri: string;
+    authToken: string;
+  },
+) {
+  return authorizedPost<Record<string, unknown>>(settings, "/api/1/webhooks/update_settings", {
+    ...payload,
+    webHooksFilter: {
+      deliveryOrderFilter: {
+        orderStatuses: [
+          "Unconfirmed",
+          "WaitCooking",
+          "ReadyForCooking",
+          "CookingStarted",
+          "CookingCompleted",
+          "Waiting",
+          "OnWay",
+          "Delivered",
+          "Closed",
+          "Cancelled",
+        ],
+        errors: true,
+      },
+    },
+  });
+}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCashierSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { pollIikoOrderStatusesQuick } from "@/lib/iiko-status-sync";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,7 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  await pollIikoOrderStatusesQuick();
 
   const db = getDb();
   const orders = db
@@ -23,6 +25,7 @@ export async function GET() {
          o.address_text,
          o.branch_id,
          o.branch_name,
+         o.order_type,
          o.subtotal,
          o.delivery_fee,
          o.total,
@@ -64,6 +67,7 @@ export async function GET() {
     address_text: string;
     branch_id: number | null;
     branch_name: string;
+    order_type: string;
     subtotal: number;
     delivery_fee: number;
     total: number;

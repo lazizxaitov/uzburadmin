@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import MapPointPicker from "../_components/map-point-picker";
 
 import { Card, GhostButton, Modal, PrimaryButton, SectionTitle } from "../_components/ui";
 
@@ -84,6 +86,8 @@ export default function BranchesPage() {
   const [error, setError] = useState<string | null>(null);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const [refs, setRefs] = useState<IikoRefs | null>(null);
+  // Адрес, подставленный с карты (его можно перезаписывать при смене точки).
+  const autoAddressRef = useRef("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,7 +101,6 @@ export default function BranchesPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -215,6 +218,30 @@ export default function BranchesPage() {
     }
   };
 
+  const [webhookBusy, setWebhookBusy] = useState(false);
+  const [webhookMessage, setWebhookMessage] = useState<string | null>(null);
+
+  /** Регистрирует в iiko вебхук: статусы заказов будут приходить автоматически. */
+  const connectWebhooks = async () => {
+    setWebhookBusy(true);
+    setWebhookMessage(null);
+    try {
+      const response = await fetch("/api/iiko/webhooks", { method: "POST" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok && !data?.results) throw new Error(data?.error ?? "Ошибка подключения");
+      const lines = (data.results as Array<{ name: string; ok: boolean; error?: string }>).map(
+        (item) => `${item.ok ? "✅" : "❌"} ${item.name}${item.error ? ` — ${item.error}` : ""}`,
+      );
+      setWebhookMessage(
+        `Статусы заказов из iiko:\n${lines.join("\n")}\n\nБонусы клиенту начисляются автоматически, когда заказ в iiko становится «Доставлен» или «Закрыт».`,
+      );
+    } catch (err) {
+      setWebhookMessage(`❌ ${err instanceof Error ? err.message : "Ошибка подключения"}`);
+    } finally {
+      setWebhookBusy(false);
+    }
+  };
+
   const remove = async (item: Branch) => {
     if (!window.confirm(`Удалить филиал «${item.name}»?`)) return;
     await fetch(`/api/branches/${item.id}`, { method: "DELETE" });
@@ -259,8 +286,19 @@ export default function BranchesPage() {
           title="Филиалы"
           subtitle="Заказ автоматически уходит в ближайший к клиенту филиал, в радиус доставки которого попадает адрес, и отправляется в iiko этого филиала."
         />
-        <PrimaryButton onClick={openCreate}>Добавить филиал</PrimaryButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <GhostButton onClick={connectWebhooks} disabled={webhookBusy}>
+            {webhookBusy ? "Подключение…" : "Подключить статусы из iiko"}
+          </GhostButton>
+          <PrimaryButton onClick={openCreate}>Добавить филиал</PrimaryButton>
+        </div>
       </div>
+
+      {webhookMessage ? (
+        <Card>
+          <p className="whitespace-pre-line text-sm">{webhookMessage}</p>
+        </Card>
+      ) : null}
 
       {loading ? (
         <Card>Загрузка…</Card>
@@ -368,32 +406,34 @@ export default function BranchesPage() {
             </label>
           </div>
 
-          <label className="block text-sm font-semibold">
-            Точка на карте
-            <input
-              value={form.coordinates}
-              placeholder="41.311081, 69.240562 — или вставьте ссылку из Яндекс/Google Карт"
-              onChange={(event) => setForm((prev) => ({ ...prev, coordinates: event.target.value }))}
-              className={inputClass}
-            />
-            <span className="mt-1 block text-xs font-normal text-[var(--muted)]">
-              {coordinates ? (
-                <>
-                  Распознано: {coordinates.lat}, {coordinates.lng} ·{" "}
-                  <a
-                    className="underline"
-                    target="_blank"
-                    rel="noreferrer"
-                    href={`https://yandex.uz/maps/?pt=${coordinates.lng},${coordinates.lat}&z=16`}
-                  >
-                    проверить на карте
-                  </a>
-                </>
-              ) : (
-                "В Яндекс Картах нажмите на здание филиала и скопируйте координаты. По ним определяется ближайший филиал."
-              )}
-            </span>
-          </label>
+          <div className="text-sm font-semibold">
+            Местоположение филиала
+            <div className="mt-1">
+              <MapPointPicker
+                value={coordinates}
+                onChange={(point) =>
+                  setForm((prev) => ({ ...prev, coordinates: `${point.lat}, ${point.lng}` }))
+                }
+                onAddress={(address) =>
+                  // Адрес подставляем, только если его ещё не вводили вручную.
+                  setForm((prev) =>
+                    !prev.address.trim() || prev.address === autoAddressRef.current
+                      ? ((autoAddressRef.current = address), { ...prev, address })
+                      : prev,
+                  )
+                }
+              />
+            </div>
+            <details className="mt-2 text-xs font-normal text-[var(--muted)]">
+              <summary className="cursor-pointer">Ввести координаты вручную</summary>
+              <input
+                value={form.coordinates}
+                placeholder="41.311081, 69.240562 — или ссылка из Яндекс/Google Карт"
+                onChange={(event) => setForm((prev) => ({ ...prev, coordinates: event.target.value }))}
+                className={inputClass}
+              />
+            </details>
+          </div>
 
           <div className="grid gap-3 md:grid-cols-3">
             <label className="text-sm font-semibold">

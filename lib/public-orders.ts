@@ -1,5 +1,5 @@
 import { getDb, nowIso } from "@/lib/db";
-import { resolveBranchForAddress, type Branch } from "@/lib/branches";
+import { getBranch, resolveBranchForAddress, type Branch, type BranchResolution } from "@/lib/branches";
 import { validateDelivery } from "@/lib/delivery-validation";
 import { loadModifierGroups, modifierPriceForSize, type OrderItemOptions } from "@/lib/product-modifiers";
 
@@ -29,7 +29,17 @@ export type PaymentInput = {
   status?: string;
 };
 
+/** delivery — доставка; pickup — самовывоз; dine_in — на месте в ресторане. */
+export type OrderType = "delivery" | "pickup" | "dine_in";
+
+export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
+  delivery: "Доставка",
+  pickup: "Самовывоз",
+  dine_in: "В ресторане",
+};
+
 export type PreparedOrder = {
+  orderType: OrderType;
   customerName: string;
   customerPhone: string;
   address: AddressInput | null;
@@ -96,7 +106,11 @@ export function preparePublicOrder(body: unknown):
   const payload = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const customerName = payload.customerName?.toString()?.trim() || "Гость";
   const customerPhone = payload.customerPhone?.toString()?.trim() ?? "";
-  const address = (payload.address ?? null) as AddressInput | null;
+  const orderType: OrderType =
+    payload.orderType === "pickup" || payload.orderType === "dine_in" ? payload.orderType : "delivery";
+  const isDelivery = orderType === "delivery";
+  // Для самовывоза и «на месте» адрес клиента не нужен.
+  const address = isDelivery ? (payload.address ?? null) as AddressInput | null : null;
   const payment = (payload.payment ?? {}) as PaymentInput;
   const itemsRaw: unknown[] = Array.isArray(payload.items) ? payload.items : [];
 
@@ -140,12 +154,20 @@ export function preparePublicOrder(body: unknown):
       }
     | undefined;
 
-  const deliveryValidation = validateDelivery(address, settings ?? {});
-  if (!deliveryValidation.ok) {
-    return { ok: false, status: 400, error: deliveryValidation.error };
+  let branchResolution: BranchResolution;
+  if (isDelivery) {
+    const deliveryValidation = validateDelivery(address, settings ?? {});
+    if (!deliveryValidation.ok) {
+      return { ok: false, status: 400, error: deliveryValidation.error };
+    }
+    branchResolution = resolveBranchForAddress(address?.latitude, address?.longitude);
+  } else {
+    // Самовывоз / на месте: филиал выбирает клиент на карте.
+    const branch = getBranch(toPositiveInt(payload.branchId));
+    branchResolution = branch && branch.is_active === 1
+      ? { ok: true, branch, distanceKm: null }
+      : { ok: false, error: "Выберите филиал" };
   }
-
-  const branchResolution = resolveBranchForAddress(address?.latitude, address?.longitude);
   if (!branchResolution.ok) {
     return { ok: false, status: 400, error: branchResolution.error };
   }
@@ -279,11 +301,11 @@ export function preparePublicOrder(body: unknown):
     0
   );
   const minOrder = Number(settings?.min_order ?? 0);
-  if (minOrder > 0 && subtotal < minOrder) {
+  if (isDelivery && minOrder > 0 && subtotal < minOrder) {
     return { ok: false, status: 400, error: `Минимальный заказ ${minOrder}` };
   }
 
-  const deliveryFee = Number(settings?.delivery_fee ?? 0);
+  const deliveryFee = isDelivery ? Number(settings?.delivery_fee ?? 0) : 0;
   const total = subtotal + deliveryFee;
   const bonusPercent = Number(settings?.bonus_enabled ?? 1) === 1
     ? Number(settings?.bonus_percent ?? 0)
@@ -293,6 +315,7 @@ export function preparePublicOrder(body: unknown):
   return {
     ok: true,
     value: {
+      orderType,
       customerName,
       customerPhone,
       address,
@@ -303,7 +326,11 @@ export function preparePublicOrder(body: unknown):
       deliveryFee,
       total,
       bonusEarned,
-      addressText: buildAddressText(address),
+      addressText: isDelivery
+        ? buildAddressText(address)
+        : `${ORDER_TYPE_LABELS[orderType]}: ${branchResolution.branch?.name ?? ""}${
+            branchResolution.branch?.address ? `, ${branchResolution.branch.address}` : ""
+          }`,
       externalId: buildExternalId(),
       payment,
     },
@@ -322,9 +349,9 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
         payment_status, payment_transaction_id, payment_session, payment_card_mask,
         poster_incoming_order_id, poster_transaction_id, poster_sync_status, poster_sync_error,
         iiko_order_id, iiko_correlation_id, iiko_sync_status, iiko_sync_error,
-        branch_id, branch_name, created_at, updated_at
+        branch_id, branch_name, order_type, created_at, updated_at
       )
-      VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, 'mobile', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, 'mobile', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       prepared.externalId,
       prepared.customerName,
@@ -350,6 +377,7 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
       syncMeta.iikoSyncError?.trim() || "",
       prepared.branch?.id ?? null,
       prepared.branch?.name ?? "",
+      prepared.orderType,
       now,
       now
     );
@@ -414,6 +442,7 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
     total: prepared.total,
     bonusEarned: prepared.bonusEarned,
     addressText: prepared.addressText,
+    orderType: prepared.orderType,
     branch: prepared.branch
       ? { id: prepared.branch.id, name: prepared.branch.name, address: prepared.branch.address }
       : null,

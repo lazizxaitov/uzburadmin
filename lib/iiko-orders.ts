@@ -88,8 +88,12 @@ export async function sendOrderToIiko(prepared: PreparedOrder): Promise<IikoOrde
     order: {
       externalNumber: prepared.externalId,
       phone: normalizePhone(prepared.customerPhone),
-      orderTypeId: settings.order_type_id.trim() || undefined,
-      deliveryPoint: prepared.addressText
+      // Доставка курьером — тип заказа из настроек; самовывоз и «на месте» — DeliveryByClient
+      // (в iiko orderTypeId и orderServiceType взаимоисключающие).
+      ...(prepared.orderType === "delivery"
+        ? { orderTypeId: settings.order_type_id.trim() || undefined }
+        : { orderServiceType: "DeliveryByClient" }),
+      deliveryPoint: prepared.orderType === "delivery" && prepared.addressText
         ? {
             comment: prepared.addressText,
             ...(prepared.address?.latitude != null && prepared.address?.longitude != null
@@ -97,7 +101,11 @@ export async function sendOrderToIiko(prepared: PreparedOrder): Promise<IikoOrde
               : {}),
           }
         : undefined,
-      comment: `Uzbur ${prepared.externalId}`,
+      comment: prepared.orderType === "dine_in"
+        ? `Uzbur ${prepared.externalId} — НА МЕСТЕ (в ресторане)`
+        : prepared.orderType === "pickup"
+          ? `Uzbur ${prepared.externalId} — САМОВЫВОЗ`
+          : `Uzbur ${prepared.externalId}`,
       customer: { type: "one-time", name: prepared.customerName },
       items: prepared.normalizedItems.map((item) => {
         const modifiers = (item.options?.modifiers ?? [])

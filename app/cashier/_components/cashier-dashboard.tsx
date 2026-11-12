@@ -22,6 +22,7 @@ type Order = {
   address_text: string;
   branch_id: number | null;
   branch_name: string;
+  order_type?: string;
   subtotal: number;
   delivery_fee: number;
   total: number;
@@ -47,10 +48,32 @@ type Order = {
 const statusLabels: Record<string, string> = {
   new: "Новый",
   accepted: "Принят",
+  cooking: "Готовится",
+  ready: "Готов",
   on_way: "В пути",
   delivered: "Доставлен",
   canceled: "Отклонен",
 };
+
+/** Следующие шаги для кассира; в «delivered» начисляются бонусы клиенту. */
+function nextSteps(order: Order): Array<{ status: string; label: string }> {
+  const isDelivery = !order.order_type || order.order_type === "delivery";
+  const finish = isDelivery ? "Доставлен" : "Выдан клиенту";
+  switch (order.status) {
+    case "accepted":
+      return [{ status: "cooking", label: "Начать готовить" }];
+    case "cooking":
+      return [{ status: "ready", label: "Готов" }];
+    case "ready":
+      return isDelivery
+        ? [{ status: "on_way", label: "Передать курьеру" }]
+        : [{ status: "delivered", label: finish }];
+    case "on_way":
+      return [{ status: "delivered", label: finish }];
+    default:
+      return [];
+  }
+}
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("ru-RU").format(value) + " сум";
@@ -254,6 +277,11 @@ export default function CashierDashboard() {
                     <p className="mt-2 text-sm text-[var(--muted)]">
                       Создан: {formatDate(order.created_at)}
                     </p>
+                    {order.order_type && order.order_type !== "delivery" ? (
+                      <span className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                        {order.order_type === "dine_in" ? "🍽 В ресторане" : "🛍 Самовывоз"}
+                      </span>
+                    ) : null}
                     <div className="mt-3">
                       <PosterSyncBadge
                         status={order.poster_sync_status}
@@ -332,22 +360,23 @@ export default function CashierDashboard() {
                       </button>
                     </>
                   ) : null}
-                  {order.status === "accepted" ? (
+                  {nextSteps(order).map((step) => (
                     <button
-                      onClick={() => updateStatus(order.id, "on_way")}
+                      key={step.status}
+                      onClick={() => updateStatus(order.id, step.status)}
                       disabled={busyId === order.id}
                       className="rounded-2xl bg-[var(--brand-strong)] px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] disabled:opacity-60"
                     >
-                      Передать в доставку
+                      {step.label}
                     </button>
-                  ) : null}
-                  {order.status === "on_way" ? (
+                  ))}
+                  {order.status !== "new" ? (
                     <button
-                      onClick={() => updateStatus(order.id, "delivered")}
+                      onClick={() => setRejecting(order)}
                       disabled={busyId === order.id}
-                      className="rounded-2xl bg-[var(--brand-strong)] px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] disabled:opacity-60"
+                      className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 disabled:opacity-60"
                     >
-                      Завершить заказ
+                      Отменить
                     </button>
                   ) : null}
                 </div>

@@ -519,6 +519,17 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
                 metadataById,
                 defaultSize.sizeId,
               );
+              // Товар с нулевой ценой: цену задаёт вариант в обязательной группе
+              // (например, размер пиццы модификатором) — выбрать можно только один вариант.
+              if (price === 0) {
+                for (const group of modifierGroups) {
+                  if (group.minQty < 1) continue;
+                  group.minQty = 1;
+                  group.maxQty = 1;
+                  group.freeQty = 0;
+                  for (const option of group.options) option.maxQty = 1;
+                }
+              }
               saveModifierGroups(row.id, modifierGroups, { fromSync: true });
               importedModifierGroups += modifierGroups.length;
               importedProducts += 1;

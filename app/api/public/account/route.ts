@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getDb, nowIso } from "@/lib/db";
+import { pollIikoOrderStatusesQuick } from "@/lib/iiko-status-sync";
 import { rateLimit, requirePublicApiKey } from "@/lib/public-auth";
 import { serializeCustomerAccount } from "@/lib/public-customer-account";
 import {
@@ -20,6 +21,8 @@ export async function GET(request: Request) {
   if (rateError) {
     return NextResponse.json({ error: rateError.message }, { status: rateError.status });
   }
+  // Свежие статусы заказов из iiko (запасной вариант к вебхуку).
+  await pollIikoOrderStatusesQuick();
 
   const session = requireCustomerSession(request);
   if (!session) {
