@@ -66,9 +66,16 @@ function text(value: unknown) {
 }
 
 function num(value: unknown) {
+  // null / "" не должны превращаться в 0 (Number(null) === 0).
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
+
+// Организация, для которой берём цены (в меню iiko цены бывают по организациям).
+let priceOrganizationId = "";
 
 function asRecord(value: unknown): Raw {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Raw : {};
@@ -78,17 +85,51 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function firstPrice(record: Raw) {
-  const direct = num(record.price);
+/**
+ * Цена в любом из форматов iiko: число, строка, объект
+ * { currentPrice } / { price } / { value }, массив цен по организациям.
+ */
+function priceOf(value: unknown, depth = 0): number | null {
+  if (depth > 4) return null;
+  const direct = num(value);
   if (direct != null) return direct;
-  for (const key of ["prices", "sizePrices"]) {
-    for (const entry of asArray(record[key])) {
-      const price = num(asRecord(entry).price);
+  if (Array.isArray(value)) {
+    const entries = value.map(asRecord);
+    const forOrg = entries.find((entry) => {
+      const orgs = [
+        text(entry.organizationId),
+        ...asArray(entry.organizations).map((item) => text(item)),
+        ...asArray(entry.organizationIds).map((item) => text(item)),
+      ];
+      return priceOrganizationId && orgs.includes(priceOrganizationId);
+    });
+    for (const entry of forOrg ? [forOrg, ...entries] : entries) {
+      const price = priceOf(entry, depth + 1);
+      if (price != null) return price;
+    }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Raw;
+    if (record.isIncludedInMenu === false) return null;
+    for (const key of ["currentPrice", "price", "value", "amount", "prices"]) {
+      const price = priceOf(record[key], depth + 1);
       if (price != null) return price;
     }
   }
   return null;
 }
+
+function firstPrice(record: Raw) {
+  for (const key of ["price", "prices", "sizePrices", "currentPrice"]) {
+    const price = priceOf(record[key]);
+    if (price != null) return price;
+  }
+  return null;
+}
+
+// Названия размеров, если меню отдаёт у товара только sizeId.
+let sizeNameById = new Map<string, string>();
 
 function getSettings() {
   return getDb().prepare("SELECT * FROM iiko_settings WHERE id = 1").get() as IikoSettingsRow;
@@ -121,7 +162,7 @@ function parseSizes(product: Raw): ParsedSize[] {
     .filter((size) => size.isHidden !== true)
     .map((size) => ({
       sizeId: text(size.sizeId ?? size.id),
-      sizeName: text(size.sizeName ?? size.name),
+      sizeName: text(size.sizeName ?? size.name) || sizeNameById.get(text(size.sizeId ?? size.id)) || "",
       isDefault: size.isDefault === true,
       price: firstPrice(size),
       images: [text(size.buttonImageUrl), text(size.image), text(size.buttonImageCroppedUrl)].filter(Boolean),
@@ -227,6 +268,16 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
         externalMenu.id,
       );
       saveRawMenu(result);
+      priceOrganizationId = settings.organization_id;
+      sizeNameById = new Map();
+      for (const key of ["sizes", "productSizes", "itemSizes"]) {
+        for (const entry of asArray(result[key])) {
+          const size = asRecord(entry);
+          const id = text(size.id ?? size.sizeId);
+          const name = text(size.name ?? size.sizeName);
+          if (id && name) sizeNameById.set(id, name);
+        }
+      }
       const groups = (asArray(result.itemsGroups).length
         ? asArray(result.itemsGroups)
         : asArray(result.itemCategories)) as IikoGroup[];

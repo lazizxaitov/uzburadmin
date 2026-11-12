@@ -70,6 +70,7 @@ npm ci
 mkdir -p data/uploads
 cp .env.example .env
 npm run build
+rm -rf .next/standalone/.next/static .next/standalone/public
 cp -R .next/static .next/standalone/.next/static
 cp -R public .next/standalone/public
 pm2 start ecosystem.config.cjs
@@ -106,6 +107,7 @@ cd /var/www/uzburadmin
 git pull origin main
 npm ci
 npm run build
+rm -rf .next/standalone/.next/static .next/standalone/public
 cp -R .next/static .next/standalone/.next/static
 cp -R public .next/standalone/public
 pm2 restart uzburadmin
@@ -124,6 +126,8 @@ pm2 restart uzburadmin
 Keep Poster order export disabled if orders should be sent only to iiko.
 
 ## Notes
+
+- Always `rm -rf` the standalone `static`/`public` copies before `cp -R`: if the target exists, `cp -R` nests files into `static/static` and every `/_next/static/*` request returns 404 ("This page couldn't load").
 
 - Current build passes locally
 - `next.config.ts` uses `output: "standalone"`
