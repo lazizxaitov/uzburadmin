@@ -356,6 +356,7 @@ ensureColumn("settings", "cashier_password", "TEXT NOT NULL DEFAULT 'kassa123'")
 ensureColumn("banners", "banner_type", "TEXT NOT NULL DEFAULT 'image'");
 ensureColumn("banners", "target_product_id", "INTEGER");
 ensureColumn("banners", "target_category_id", "INTEGER");
+ensureColumn("banners", "target_product_ids", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "payment_method", "TEXT NOT NULL DEFAULT 'cash'");
 ensureColumn("orders", "payment_provider", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT ''");
@@ -407,6 +408,34 @@ ensureColumn("poster_settings", "order_spot_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("customers", "password_hash", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("portion_options", "iiko_size_id", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("order_items", "options_json", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("orders", "branch_id", "INTEGER");
+ensureColumn("orders", "branch_name", "TEXT NOT NULL DEFAULT ''");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL DEFAULT '',
+    latitude REAL,
+    longitude REAL,
+    delivery_radius_km REAL NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    iiko_api_key TEXT NOT NULL DEFAULT '',
+    iiko_organization_id TEXT NOT NULL DEFAULT '',
+    iiko_terminal_group_id TEXT NOT NULL DEFAULT '',
+    iiko_order_type_id TEXT NOT NULL DEFAULT '',
+    iiko_payment_type_id TEXT NOT NULL DEFAULT '',
+    iiko_payment_type_kind TEXT NOT NULL DEFAULT 'Card',
+    iiko_check_status TEXT NOT NULL DEFAULT '',
+    iiko_check_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_orders_branch ON orders(branch_id, created_at DESC);
+`);
+ensureColumn("branches", "payme_url", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("branches", "click_url", "TEXT NOT NULL DEFAULT ''");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS modifier_groups (

@@ -28,10 +28,28 @@ function normalizePhone(value: string) {
 
 export async function sendOrderToIiko(prepared: PreparedOrder): Promise<IikoOrderSyncResult> {
   const db = getDb();
-  const settings = db.prepare("SELECT * FROM iiko_settings WHERE id = 1").get() as IikoOrderSettings;
-  if (Number(settings?.send_orders_to_iiko ?? 0) !== 1) {
+  const globalSettings = db.prepare("SELECT * FROM iiko_settings WHERE id = 1").get() as IikoOrderSettings;
+  if (Number(globalSettings?.send_orders_to_iiko ?? 0) !== 1) {
     return { ok: true, status: "skipped", orderId: "", correlationId: "", message: "iiko order sync disabled" };
   }
+
+  // У филиала своя iiko: свой API ключ, организация и терминал.
+  // App ID / Client Secret / адрес API — общие, из настроек iiko.
+  const branch = prepared.branch;
+  if (branch && !branch.iiko_api_key.trim()) {
+    return { ok: false, status: "failed", message: `У филиала «${branch.name}» не указан API ключ iiko` };
+  }
+  const settings: IikoOrderSettings = branch
+    ? {
+        ...globalSettings,
+        api_login: branch.iiko_api_key,
+        organization_id: branch.iiko_organization_id,
+        terminal_group_id: branch.iiko_terminal_group_id,
+        order_type_id: branch.iiko_order_type_id,
+        payment_type_id: branch.iiko_payment_type_id,
+        payment_type_kind: branch.iiko_payment_type_kind || "Card",
+      }
+    : globalSettings;
 
   const organizationId = settings.organization_id.trim();
   if (!organizationId) {

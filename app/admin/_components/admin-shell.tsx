@@ -12,6 +12,7 @@ const navItems = [
   { href: "/admin/banners", label: "Баннеры", icon: "🖼️" },
   { href: "/admin/categories", label: "Категории", icon: "📚" },
   { href: "/admin/products", label: "Товары", icon: "🍔" },
+  { href: "/admin/branches", label: "Филиалы", icon: "📍" },
   { href: "/admin/settings", label: "Настройки", icon: "⚙️" },
 ];
 

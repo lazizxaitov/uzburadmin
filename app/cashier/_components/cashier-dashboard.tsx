@@ -20,6 +20,8 @@ type Order = {
   customer_phone: string;
   status: string;
   address_text: string;
+  branch_id: number | null;
+  branch_name: string;
   subtotal: number;
   delivery_fee: number;
   total: number;
@@ -107,6 +109,7 @@ export default function CashierDashboard() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<Order | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [branchFilter, setBranchFilter] = useState("all");
 
   const load = async (preserveLoading = false) => {
     if (!preserveLoading) {
@@ -130,9 +133,20 @@ export default function CashierDashboard() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const branchNames = useMemo(
+    () => [...new Set(orders.map((item) => item.branch_name).filter(Boolean))],
+    [orders],
+  );
+
   const activeOrders = useMemo(
-    () => orders.filter((item) => item.status !== "delivered" && item.status !== "canceled"),
-    [orders]
+    () =>
+      orders.filter(
+        (item) =>
+          item.status !== "delivered" &&
+          item.status !== "canceled" &&
+          (branchFilter === "all" || item.branch_name === branchFilter),
+      ),
+    [orders, branchFilter]
   );
 
   const logout = async () => {
@@ -194,6 +208,23 @@ export default function CashierDashboard() {
           <div className="flex flex-wrap gap-4 text-sm font-semibold text-[var(--muted)]">
             <span>Активных заказов: {activeOrders.length}</span>
             <span>Всего заказов: {orders.length}</span>
+            {branchNames.length ? (
+              <label className="flex items-center gap-2">
+                Филиал:
+                <select
+                  value={branchFilter}
+                  onChange={(event) => setBranchFilter(event.target.value)}
+                  className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-1 text-sm text-[var(--ink)]"
+                >
+                  <option value="all">Все</option>
+                  {branchNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
         </div>
 
@@ -243,6 +274,9 @@ export default function CashierDashboard() {
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <InfoBlock title="Клиент" value={order.customer_name || "Без имени"} />
                   <InfoBlock title="Телефон" value={order.customer_phone || "—"} />
+                  {order.branch_name ? (
+                    <InfoBlock title="Филиал" value={order.branch_name} className="md:col-span-2" />
+                  ) : null}
                   <InfoBlock title="Адрес" value={order.address_text || "Самовывоз"} className="md:col-span-2" />
                   <InfoBlock
                     title="Оплата"

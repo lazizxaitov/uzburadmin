@@ -1,4 +1,5 @@
 import { getDb, nowIso } from "@/lib/db";
+import { resolveBranchForAddress, type Branch } from "@/lib/branches";
 import { validateDelivery } from "@/lib/delivery-validation";
 import { loadModifierGroups, type OrderItemOptions } from "@/lib/product-modifiers";
 
@@ -40,6 +41,9 @@ export type PreparedOrder = {
     total: number;
     options: OrderItemOptions | null;
   }>;
+  /** Филиал, в который уходит заказ (null — филиалы не настроены). */
+  branch: Branch | null;
+  branchDistanceKm: number | null;
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -139,6 +143,11 @@ export function preparePublicOrder(body: unknown):
   const deliveryValidation = validateDelivery(address, settings ?? {});
   if (!deliveryValidation.ok) {
     return { ok: false, status: 400, error: deliveryValidation.error };
+  }
+
+  const branchResolution = resolveBranchForAddress(address?.latitude, address?.longitude);
+  if (!branchResolution.ok) {
+    return { ok: false, status: 400, error: branchResolution.error };
   }
 
   const productIds = [...new Set(items.map((item: OrderItemInput) => item.productId))];
@@ -287,6 +296,8 @@ export function preparePublicOrder(body: unknown):
       customerPhone,
       address,
       normalizedItems,
+      branch: branchResolution.branch,
+      branchDistanceKm: branchResolution.distanceKm,
       subtotal,
       deliveryFee,
       total,
@@ -310,9 +321,9 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
         payment_status, payment_transaction_id, payment_session, payment_card_mask,
         poster_incoming_order_id, poster_transaction_id, poster_sync_status, poster_sync_error,
         iiko_order_id, iiko_correlation_id, iiko_sync_status, iiko_sync_error,
-        created_at, updated_at
+        branch_id, branch_name, created_at, updated_at
       )
-      VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, 'mobile', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, 'mobile', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       prepared.externalId,
       prepared.customerName,
@@ -336,6 +347,8 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
       syncMeta.iikoCorrelationId?.trim() || "",
       syncMeta.iikoSyncStatus?.trim() || "",
       syncMeta.iikoSyncError?.trim() || "",
+      prepared.branch?.id ?? null,
+      prepared.branch?.name ?? "",
       now,
       now
     );
@@ -400,6 +413,9 @@ export function createPublicOrder(prepared: PreparedOrder, syncMeta: OrderSyncMe
     total: prepared.total,
     bonusEarned: prepared.bonusEarned,
     addressText: prepared.addressText,
+    branch: prepared.branch
+      ? { id: prepared.branch.id, name: prepared.branch.name, address: prepared.branch.address }
+      : null,
     posterIncomingOrderId: syncMeta.posterIncomingOrderId?.trim() || "",
     posterTransactionId: syncMeta.posterTransactionId?.trim() || "",
     posterSyncStatus: syncMeta.posterSyncStatus?.trim() || "",

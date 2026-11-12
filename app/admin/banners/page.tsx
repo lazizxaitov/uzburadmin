@@ -10,6 +10,7 @@ import {
   Modal,
 } from "../_components/ui";
 import ImageCropper from "../_components/image-cropper";
+import ProductMultiPicker from "../_components/product-multi-picker";
 
 type Banner = {
   id: number;
@@ -20,6 +21,7 @@ type Banner = {
   use_target_image?: number;
   target_product_id?: number | null;
   target_category_id?: number | null;
+  target_product_ids?: string | null;
   link_url?: string | null;
   sort_order: number;
   is_active: number;
@@ -58,6 +60,7 @@ export default function BannersPage() {
     useTargetImage: false,
     targetProductId: "",
     targetCategoryId: "",
+    targetProductIds: [] as number[],
     linkUrl: "",
     sortOrder: 0,
     isActive: true,
@@ -98,6 +101,7 @@ export default function BannersPage() {
       useTargetImage: false,
       targetProductId: "",
       targetCategoryId: "",
+      targetProductIds: [],
       linkUrl: "",
       sortOrder: 0,
       isActive: true,
@@ -120,6 +124,10 @@ export default function BannersPage() {
       useTargetImage: item.use_target_image === 1,
       targetProductId: item.target_product_id ? String(item.target_product_id) : "",
       targetCategoryId: item.target_category_id ? String(item.target_category_id) : "",
+      targetProductIds: (item.target_product_ids ?? "")
+        .split(",")
+        .map(Number)
+        .filter((id) => id > 0),
       linkUrl: item.link_url ?? "",
       sortOrder: item.sort_order ?? 0,
       isActive: item.is_active === 1,
@@ -155,6 +163,10 @@ export default function BannersPage() {
       setError("Выберите товар");
       return;
     }
+    if (form.bannerType === "products" && form.targetProductIds.length === 0) {
+      setError("Выберите товары акции");
+      return;
+    }
     if (form.bannerType === "category" && !form.targetCategoryId) {
       setError("Выберите категорию");
       return;
@@ -176,6 +188,7 @@ export default function BannersPage() {
         form.bannerType === "category"
           ? Number(form.targetCategoryId) || null
           : null,
+      targetProductIds: form.bannerType === "products" ? form.targetProductIds : [],
       linkUrl: form.bannerType === "image" ? form.linkUrl || null : null,
       sortOrder: Number(form.sortOrder) || 0,
       isActive: form.isActive,
@@ -280,7 +293,9 @@ export default function BannersPage() {
                     {item.title_uz}
                   </p>
                   <p className="mt-2 text-xs text-[var(--muted)]">
-                    {item.banner_type === "product"
+                    {item.banner_type === "products"
+                      ? `Акция: ${(item.target_product_ids ?? "").split(",").filter(Boolean).length} товаров`
+                      : item.banner_type === "product"
                       ? `Товар #${item.target_product_id ?? "—"}`
                       : item.banner_type === "category"
                         ? `Категория #${item.target_category_id ?? "—"}`
@@ -356,6 +371,7 @@ export default function BannersPage() {
                   useTargetImage: false,
                   targetProductId: "",
                   targetCategoryId: "",
+                  targetProductIds: [],
                   linkUrl: "",
                 }))
               }
@@ -363,6 +379,7 @@ export default function BannersPage() {
             >
               <option value="image">Целая картинка</option>
               <option value="product">Товар</option>
+              <option value="products">Акция (несколько товаров)</option>
               <option value="category">Категория</option>
             </select>
           </label>
@@ -377,6 +394,14 @@ export default function BannersPage() {
                 className="mt-2 w-full rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm font-medium text-[var(--ink)]"
               />
             </label>
+          ) : form.bannerType === "products" ? (
+            <ProductMultiPicker
+              products={products}
+              value={form.targetProductIds}
+              onChange={(targetProductIds) =>
+                setForm((prev) => ({ ...prev, targetProductIds }))
+              }
+            />
           ) : form.bannerType === "product" ? (
             <div className="text-sm font-semibold">
               Товар
@@ -513,6 +538,8 @@ export default function BannersPage() {
               />
               {form.bannerType === "product"
                 ? "Использовать фото товара"
+                : form.bannerType === "products"
+                ? "Использовать фото первого товара"
                 : "Использовать фото категории"}
             </label>
           ) : null}

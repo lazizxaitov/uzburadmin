@@ -17,6 +17,7 @@ type Order = {
   customer_phone: string;
   status: string;
   address_text: string;
+  branch_name?: string;
   total: number;
   payment_method: string | null;
   poster_sync_status: string | null;
@@ -204,6 +205,7 @@ export default function CashierHistory() {
                 <div className="mt-4 space-y-2 text-sm text-[var(--ink)]">
                   <p><b>Клиент:</b> {order.customer_name || "Без имени"}</p>
                   <p><b>Телефон:</b> {order.customer_phone || "—"}</p>
+                  {order.branch_name ? <p><b>Филиал:</b> {order.branch_name}</p> : null}
                   <p><b>Адрес:</b> {order.address_text || "Самовывоз"}</p>
                   <p><b>Оплата:</b> {order.payment_method || "—"}</p>
                   {order.status === "delivered" ? (

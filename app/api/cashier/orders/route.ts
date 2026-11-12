@@ -21,6 +21,8 @@ export async function GET() {
          o.customer_phone,
          o.status,
          o.address_text,
+         o.branch_id,
+         o.branch_name,
          o.subtotal,
          o.delivery_fee,
          o.total,
@@ -60,6 +62,8 @@ export async function GET() {
     customer_phone: string;
     status: string;
     address_text: string;
+    branch_id: number | null;
+    branch_name: string;
     subtotal: number;
     delivery_fee: number;
     total: number;
