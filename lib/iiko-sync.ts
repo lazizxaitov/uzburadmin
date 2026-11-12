@@ -135,22 +135,17 @@ function getSettings() {
   return getDb().prepare("SELECT * FROM iiko_settings WHERE id = 1").get() as IikoSettingsRow;
 }
 
-function deactivateMissing(
-  table: "categories" | "products",
-  ids: string[],
-  now: string,
-) {
-  const db = getDb();
-  if (!ids.length) {
-    db.prepare(`UPDATE ${table} SET is_active = 0, updated_at = ? WHERE synced_from_iiko = 1`).run(now);
-    return;
-  }
+/**
+ * После синхронизации в админке остаётся только то, что есть в iiko:
+ * всё остальное (старые и добавленные вручную позиции) удаляется.
+ * Если iiko вернул пустой список — ничего не удаляем (защита от сбоя).
+ */
+function removeMissing(table: "categories" | "products", ids: string[]) {
+  if (!ids.length) return;
   const placeholders = ids.map(() => "?").join(", ");
-  db.prepare(`
-    UPDATE ${table}
-    SET is_active = 0, updated_at = ?
-    WHERE synced_from_iiko = 1 AND iiko_id NOT IN (${placeholders})
-  `).run(now, ...ids);
+  getDb()
+    .prepare(`DELETE FROM ${table} WHERE iiko_id IS NULL OR iiko_id = '' OR iiko_id NOT IN (${placeholders})`)
+    .run(...ids);
 }
 
 function parseSizes(product: Raw): ParsedSize[] {
@@ -389,7 +384,7 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
           );
           importedCategories += 1;
         }
-        deactivateMissing("categories", importedIds, now);
+        removeMissing("categories", importedIds);
       }
 
       if (settings.import_products === 1) {
@@ -537,7 +532,7 @@ export async function runIikoSync(): Promise<IikoSyncResult> {
           }
         });
         importProducts();
-        deactivateMissing("products", importedIds, now);
+        removeMissing("products", importedIds);
       }
 
       db.prepare(`
